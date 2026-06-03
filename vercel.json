@@ -1,7 +1,4 @@
 {
-  "outputDirectory": "build/web",
-  "buildCommand": null,
-  "installCommand": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
