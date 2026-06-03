@@ -1,0 +1,67 @@
+name: welcome2gh
+description: Welcome2Ghana — Smart tourism and student assistance app for Accra.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Navigation
+  go_router: ^14.0.0
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # UI
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+
+  # Maps
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+  # Local storage
+  shared_preferences: ^2.2.3
+
+  # HTTP (used by directions screen for OSRM routing)
+  http: ^1.2.0
+
+  # Backend (Supabase)
+  supabase_flutter: ^2.5.6
+  image_picker: ^1.1.2
+  share_plus: ^9.0.0
+
+  # Utils
+  geolocator: ^12.0.0
+  permission_handler: ^11.3.1
+  url_launcher: ^6.2.6
+  flutter_map_marker_cluster: ^1.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/onboarding/
+    - assets/icons/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.png"
+  # White background so the black Adinkra mark stays visible on the launcher icon
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
