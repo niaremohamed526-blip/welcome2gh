@@ -117042,21 +117042,21 @@ p=k.d
 if((p==null?j:p.d)==="admin"){p=A.E(a).ok.ax
 B.b.M(r,A.b([A.v("ADMIN",j,j,j,j,p==null?j:p.bF(B.H),j,j),B.ab,new A.j7(B.fh,"Admin Dashboard",B.H,new A.aPV(a),j),B.aS],q))}r.push(A.v("SETTINGS",j,j,j,j,A.E(a).ok.ax,j,j))
 r.push(B.ab)
-r.push(new A.j7(B.O5,"Edit Profile",B.e,new A.aPX(k,a),j))
-r.push(new A.j7(B.Nl,"Add a Place",B.e,new A.aPY(a),j))
-r.push(new A.j7(B.fg,"Fair Prices",B.e,new A.aPZ(a),j))
-r.push(new A.j7(B.Nn,"Settings",B.e,new A.aQ_(a),j))
-r.push(new A.j7(B.ee,"Ask the AI Guide",B.e,new A.aQ0(a),j))
+r.push(new A.j7(B.O5,"Edit Profile",j,new A.aPX(k,a),j))
+r.push(new A.j7(B.Nl,"Add a Place",j,new A.aPY(a),j))
+r.push(new A.j7(B.fg,"Fair Prices",j,new A.aPZ(a),j))
+r.push(new A.j7(B.Nn,"Settings",j,new A.aQ_(a),j))
+r.push(new A.j7(B.ee,"Ask the AI Guide",j,new A.aQ0(a),j))
 r.push(B.aS)
 r.push(A.v("SAFETY",j,j,j,j,A.E(a).ok.ax,j,j))
 r.push(B.ab)
 r.push(new A.j7(B.Om,"Emergency Contacts",B.H,new A.aQ1(k,a),j))
-r.push(new A.j7(B.Np,"Safety Settings",B.e,new A.aQ2(),j))
+r.push(new A.j7(B.Np,"Safety Settings",j,new A.aQ2(),j))
 r.push(B.aS)
 r.push(A.v("ACCOUNT",j,j,j,j,A.E(a).ok.ax,j,j))
 r.push(B.ab)
-r.push(new A.j7(B.nc,"Help & Support",B.e,new A.aQ3(a),j))
-r.push(new A.j7(B.NP,"About Welcome2GH",B.e,new A.aPW(a),j))
+r.push(new A.j7(B.nc,"Help & Support",j,new A.aQ3(a),j))
+r.push(new A.j7(B.NP,"About Welcome2GH",j,new A.aPW(a),j))
 r.push(new A.j7(B.NZ,"Sign Out",B.H,k.gazj(),j))
 r.push(B.fK)
 p=A.E(a).ok.ax
@@ -117195,9 +117195,15 @@ s=A.E(a).ok.z
 s=s==null?r:s.FD(11)
 return A.ax(A.b([q,B.d3,A.v(this.d,r,r,r,r,s,r,r)],t.p),B.o,B.h,B.k)}}
 A.j7.prototype={
-C(a){var s=this,r=null,q=$.r,p=q?B.y:B.e,o=A.ad(14),n=A.aZ(q?B.B:B.C,1),m=s.e,l=A.aE(s.c,m,r,20)
-m=A.v(s.d,r,r,r,r,A.R(r,r,m,r,r,r,r,r,r,r,r,14,r,r,B.aq,r,r,!0,r,r,r,r,r,r,r,r),r,r)
-return A.aY(r,A.a4(r,A.at(A.b([l,B.id,m,B.bz,B.dO,A.aE(B.ef,$.r?B.q:B.p,r,18)],t.p),B.o,B.h,B.k,0),B.i,r,r,new A.a3(p,r,n,o,r,r,B.t),r,r,r,B.LF,B.bw,r,r,r),B.u,!1,r,r,r,r,r,r,r,r,r,r,r,r,r,r,r,r,s.f,r,r,r,r,r,r,!1,B.A)}}
+C(a){var s,r,q,p,o,n,m=this,l=null,k=m.e
+if(k==null)k=$.r?B.e:B.f
+s=$.r
+r=s?B.y:B.e
+q=A.ad(14)
+p=A.aZ(s?B.B:B.C,1)
+o=A.aE(m.c,k,l,20)
+n=A.v(m.d,l,l,l,l,A.R(l,l,k,l,l,l,l,l,l,l,l,14,l,l,B.aq,l,l,!0,l,l,l,l,l,l,l,l),l,l)
+return A.aY(l,A.a4(l,A.at(A.b([o,B.id,n,B.bz,B.dO,A.aE(B.ef,$.r?B.q:B.p,l,18)],t.p),B.o,B.h,B.k,0),B.i,l,l,new A.a3(r,l,p,q,l,l,B.t),l,l,l,B.LF,B.bw,l,l,l),B.u,!1,l,l,l,l,l,l,l,l,l,l,l,l,l,l,l,l,m.f,l,l,l,l,l,l,!1,B.A)}}
 A.rb.prototype={
 xg(){var s=0,r=A.n(t.H),q=this,p
 var $async$xg=A.j(function(a,b){if(a===1)return A.k(b,r)

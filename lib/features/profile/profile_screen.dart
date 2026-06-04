@@ -297,11 +297,14 @@ class _StatItem extends StatelessWidget {
 class _SettingItem extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color accent;
+  /// Optional accent (e.g. red for admin/danger). Null = theme-aware text so
+  /// it stays readable in both light and dark themes.
+  final Color? accent;
   final VoidCallback onTap;
-  const _SettingItem({required this.icon, required this.label, this.accent = const Color(0xFFFFFFFF), required this.onTap});
+  const _SettingItem({required this.icon, required this.label, this.accent, required this.onTap});
   @override
   Widget build(BuildContext context) {
+    final color = accent ?? AppColors.white; // white in dark, navy in light
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -309,9 +312,9 @@ class _SettingItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(color: AppColors.navyCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.cardBorder)),
         child: Row(children: [
-          Icon(icon, color: accent, size: 20),
+          Icon(icon, color: color, size: 20),
           const SizedBox(width: 14),
-          Text(label, style: TextStyle(color: accent, fontWeight: FontWeight.w500, fontSize: 14)),
+          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w500, fontSize: 14)),
           const Spacer(),
           const SizedBox(width: 6),
           Icon(Icons.chevron_right_rounded, color: AppColors.grey, size: 18),
