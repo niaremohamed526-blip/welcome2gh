@@ -320,7 +320,21 @@ class _PostCardState extends State<_PostCard> {
           ]),
         ),
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 14), child: Text(p.content, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6, fontSize: 14))),
-        if (p.imageUrl != null) AppImage(url: p.imageUrl!, height: 180, width: double.infinity),
+        if (p.imageUrl != null)
+          GestureDetector(
+            onTap: () => _openImageViewer(context, p.imageUrl!),
+            child: Stack(alignment: Alignment.bottomRight, children: [
+              AppImage(url: p.imageUrl!, height: 180, width: double.infinity),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 16),
+                ),
+              ),
+            ]),
+          ),
         Padding(
           padding: const EdgeInsets.all(14),
           child: Row(children: [
@@ -364,6 +378,66 @@ class _PostCardState extends State<_PostCard> {
         postId: widget.post.id,
         onCommentAdded: () { if (mounted) setState(() => _commentCount++); },
       ),
+    );
+  }
+}
+
+/// Opens a tappable image full-screen with pinch-to-zoom.
+void _openImageViewer(BuildContext context, String url) {
+  Navigator.of(context).push(PageRouteBuilder(
+    opaque: false,
+    barrierColor: Colors.black,
+    pageBuilder: (_, __, ___) => _ImageViewer(url: url),
+    transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+  ));
+}
+
+class _ImageViewer extends StatelessWidget {
+  final String url;
+  const _ImageViewer({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(children: [
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Center(
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (c, w, prog) => prog == null
+                      ? w
+                      : const Center(child: CircularProgressIndicator(color: AppColors.yellow)),
+                  errorBuilder: (c, e, s) => const Icon(Icons.broken_image_rounded, color: Colors.white54, size: 56),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 }
