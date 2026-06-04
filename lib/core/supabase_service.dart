@@ -580,7 +580,14 @@ class SupabaseService {
   }
 
   Future<List<Place>> getAllPlacesForAdmin() async {
-    final rows = await _client.from('places').select().order('created_at', ascending: false).limit(200);
+    // Only show active places — soft-deleted ones (active = false) should
+    // disappear from the admin list just like they do for the public.
+    final rows = await _client
+        .from('places')
+        .select()
+        .eq('active', true)
+        .order('created_at', ascending: false)
+        .limit(200);
     return (rows as List).map((r) => Place.fromJson(r)).toList();
   }
 

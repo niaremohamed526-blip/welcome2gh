@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -22,8 +23,35 @@ import '../features/about/about_screen.dart';
 import '../features/legal/privacy_screen.dart';
 import '../features/legal/terms_screen.dart';
 
+/// Routes that require an authenticated user. A signed-out user landing on
+/// any of these (e.g. after signing out) is sent to /login automatically.
+const _protectedPrefixes = ['/profile', '/favorites', '/add-place', '/edit-profile', '/admin'];
+
+/// Bridges Supabase auth events to GoRouter so the redirect below re-runs the
+/// moment the user signs in or out — this is what kicks a signed-out user off
+/// the profile screen instead of leaving a blank screen behind.
+class _AuthRefresh extends ChangeNotifier {
+  _AuthRefresh(Stream<dynamic> stream) {
+    _sub = stream.listen((_) => notifyListeners());
+  }
+  late final StreamSubscription<dynamic> _sub;
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+}
+
 final router = GoRouter(
   initialLocation: '/splash',
+  refreshListenable: _AuthRefresh(SupabaseService.instance.authStateChanges),
+  redirect: (context, state) {
+    final signedIn = SupabaseService.instance.isSignedIn;
+    final location = state.uri.path;
+    final isProtected = _protectedPrefixes.any((p) => location.startsWith(p));
+    if (!signedIn && isProtected) return '/login';
+    return null;
+  },
   routes: [
     GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
