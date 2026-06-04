@@ -48,6 +48,18 @@ class DirectionsScreen extends StatefulWidget {
 class _DirectionsScreenState extends State<DirectionsScreen> {
   final _mapController = MapController();
 
+  // The public router.project-osrm.org demo only has the car network loaded,
+  // so it returns identical (driving) times for every profile. FOSSGIS runs
+  // three separate OSRM engines — car / bike / foot — that each route on the
+  // correct network, giving trustworthy per-mode distances and durations.
+  // (The profile segment after /v1/ is ignored by OSRM — each engine has its
+  // own profile compiled in — so 'driving' is fine for all three.)
+  static const Map<String, String> _osrmHost = {
+    'driving': 'https://routing.openstreetmap.de/routed-car',
+    'cycling': 'https://routing.openstreetmap.de/routed-bike',
+    'foot': 'https://routing.openstreetmap.de/routed-foot',
+  };
+
   LatLng? _userLocation;
   double? _userHeading;
   List<LatLng> _routePoints = [];
@@ -135,8 +147,9 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
     if (_userLocation == null) return;
     setState(() { _loading = true; _error = null; });
     try {
+      final host = _osrmHost[_profile] ?? _osrmHost['driving']!;
       final uri = Uri.parse(
-        'https://router.project-osrm.org/route/v1/$_profile/'
+        '$host/route/v1/driving/'
         '${_userLocation!.longitude},${_userLocation!.latitude};'
         '${widget.destLng},${widget.destLat}'
         '?overview=full&geometries=geojson&steps=true',
