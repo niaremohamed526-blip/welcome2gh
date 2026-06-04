@@ -191,13 +191,34 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         return;
       }
 
-      final last = await Geolocator.getLastKnownPosition();
-      if (last != null && mounted) {
-        _controller.setUserLocation(
-          LatLng(last.latitude, last.longitude),
-          last.heading >= 0 ? last.heading : null,
+      // Last-known position is NOT supported on web and throws — guard it on
+      // its own so a failure here can't abort the live stream setup below.
+      try {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last != null && mounted) {
+          _controller.setUserLocation(
+            LatLng(last.latitude, last.longitude),
+            last.heading >= 0 ? last.heading : null,
+          );
+        }
+      } catch (_) {/* unsupported on web — ignore */}
+
+      // One-shot current fix: gives an immediate position and, on web, this is
+      // what actually triggers the browser's location permission prompt.
+      try {
+        final cur = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
         );
-      }
+        if (mounted) {
+          final loc = LatLng(cur.latitude, cur.longitude);
+          _controller.setUserLocation(loc, cur.heading >= 0 ? cur.heading : null);
+          if (_pendingRecenter) {
+            _pendingRecenter = false;
+            _controller.setFollow(true);
+            _animatedMove(loc, 16);
+          }
+        }
+      } catch (_) {/* fall back to the position stream below */}
 
       _locationSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
