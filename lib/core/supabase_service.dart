@@ -188,7 +188,10 @@ class SupabaseService {
         .select('place_id, places(*)')
         .eq('user_id', id)
         .order('created_at', ascending: false);
+    // Skip favourites whose place was removed/deactivated — RLS returns a null
+    // embed for those, which would otherwise crash the Saved screen.
     return (rows as List)
+        .where((r) => r['places'] != null)
         .map((r) => Place.fromJson(r['places'] as Map<String, dynamic>))
         .toList();
   }
