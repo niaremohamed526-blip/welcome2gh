@@ -1,4 +1,7 @@
 {
+  "buildCommand": "echo 'Serving prebuilt Flutter web from public/'",
+  "outputDirectory": "public",
+  "cleanUrls": true,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
