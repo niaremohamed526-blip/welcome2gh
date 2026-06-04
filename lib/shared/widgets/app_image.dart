@@ -86,28 +86,32 @@ class PlaceCardSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      height: 112,
       decoration: BoxDecoration(
         color: AppColors.navyCard,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.cardBorder),
       ),
-      child: Row(children: [
-        const Skeleton(width: 90, height: 90, borderRadius: BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16))),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Skeleton(width: 80, height: 12, borderRadius: BorderRadius.circular(4)),
-              const SizedBox(height: 10),
-              Skeleton(width: 160, height: 14, borderRadius: BorderRadius.circular(4)),
-              const SizedBox(height: 8),
-              Skeleton(width: 110, height: 11, borderRadius: BorderRadius.circular(4)),
-            ]),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(width: 104, child: Skeleton()),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                Skeleton(width: 80, height: 12, borderRadius: BorderRadius.circular(4)),
+                const SizedBox(height: 10),
+                Skeleton(width: 160, height: 14, borderRadius: BorderRadius.circular(4)),
+                const SizedBox(height: 8),
+                Skeleton(width: 110, height: 11, borderRadius: BorderRadius.circular(4)),
+              ]),
+            ),
           ),
-        ),
-        const SizedBox(width: 16),
-      ]),
+          const SizedBox(width: 16),
+        ]),
+      ),
     );
   }
 }

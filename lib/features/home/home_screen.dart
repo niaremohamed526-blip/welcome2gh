@@ -517,43 +517,48 @@ class _PlaceListItem extends StatelessWidget {
       },
       child: Container(
         margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+        height: 112,
         decoration: BoxDecoration(color: AppColors.navyCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.cardBorder)),
-        child: Row(
-          children: [
-            AppImage(
-              url: place.imageUrl,
-              width: 90, height: 90,
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)),
-              fallbackIcon: Icons.place,
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [_CategoryChip(label: place.category), const Spacer(), if (place.verified) const Icon(Icons.verified_rounded, color: AppColors.yellow, size: 14)]),
-                    const SizedBox(height: 6),
-                    Text(place.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(place.address, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.star_rounded, color: AppColors.yellow, size: 13),
-                        const SizedBox(width: 3),
-                        Text('${place.rating}', style: TextStyle(color: AppColors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 4),
-                        Text('(${place.reviewCount})', style: TextStyle(color: AppColors.grey, fontSize: 11)),
-                        const Spacer(),
-                        Text(place.priceLevel, style: const TextStyle(color: AppColors.yellow, fontSize: 12, fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Image fills the full height of the card, flush on the left.
+              SizedBox(
+                width: 104,
+                child: AppImage(url: place.imageUrl, fit: BoxFit.cover, fallbackIcon: Icons.place),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(children: [_CategoryChip(label: place.category), const Spacer(), if (place.verified) const Icon(Icons.verified_rounded, color: AppColors.yellow, size: 14)]),
+                      const SizedBox(height: 6),
+                      Text(place.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(place.address, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, color: AppColors.yellow, size: 13),
+                          const SizedBox(width: 3),
+                          Text('${place.rating}', style: TextStyle(color: AppColors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 4),
+                          Text('(${place.reviewCount})', style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                          const Spacer(),
+                          Text(place.priceLevel, style: const TextStyle(color: AppColors.yellow, fontSize: 12, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
