@@ -12,7 +12,54 @@ import '../../core/geo/geo_math.dart';
 import '../../core/geo/marker_layout.dart';
 import '../../shared/widgets/app_image.dart';
 import '../../shared/widgets/user_location_dot.dart';
+import '../directions/directions_screen.dart';
 import 'map_state.dart';
+
+/// Brand colour for a place category.
+Color categoryColor(String category) {
+  switch (category.toLowerCase()) {
+    case 'transport': return const Color(0xFF00BCD4);
+    case 'university':
+    case 'study_spot': return const Color(0xFF7C4DFF);
+    case 'restaurant':
+    case 'cafe': return const Color(0xFFFF7043);
+    case 'hostel': return const Color(0xFF66BB6A);
+    case 'hotel': return const Color(0xFF26A69A);
+    case 'market':
+    case 'mall': return const Color(0xFFAB47BC);
+    case 'hospital': return const Color(0xFFEF5350);
+    case 'nightlife':
+    case 'event': return const Color(0xFFEC407A);
+    case 'tourist': return const Color(0xFF42A5F5);
+    case 'mosque':
+    case 'church': return const Color(0xFF5C6BC0);
+    default: return AppColors.yellow;
+  }
+}
+
+/// Icon for a place category (also used by the filter chips; 'All' maps to a
+/// globe).
+IconData categoryIcon(String category) {
+  switch (category.toLowerCase()) {
+    case 'all': return Icons.travel_explore_rounded;
+    case 'university': return Icons.school_rounded;
+    case 'study_spot': return Icons.menu_book_rounded;
+    case 'hostel': return Icons.bed_rounded;
+    case 'hotel': return Icons.hotel_rounded;
+    case 'restaurant': return Icons.restaurant_rounded;
+    case 'cafe': return Icons.local_cafe_rounded;
+    case 'transport': return Icons.directions_bus_rounded;
+    case 'market': return Icons.storefront_rounded;
+    case 'mall': return Icons.local_mall_rounded;
+    case 'nightlife': return Icons.nightlife_rounded;
+    case 'event': return Icons.celebration_rounded;
+    case 'hospital': return Icons.local_hospital_rounded;
+    case 'tourist': return Icons.photo_camera_rounded;
+    case 'mosque': return Icons.mosque_rounded;
+    case 'church': return Icons.church_rounded;
+    default: return Icons.place_rounded;
+  }
+}
 
 /// Union of things that can appear as a collision-managed marker on the map.
 sealed class _MapEntity {}
@@ -354,8 +401,8 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         MarkerSpec(
           id: 'p_${p.id}',
           point: LatLng(p.lat, p.lng),
-          width: p.id == st.selectedPlaceId ? 110 : 86,
-          height: p.id == st.selectedPlaceId ? 46 : 38,
+          width: p.id == st.selectedPlaceId ? 160 : 40,
+          height: p.id == st.selectedPlaceId ? 66 : 40,
           // Selected place always wins; otherwise rank by rating.
           priority: p.id == st.selectedPlaceId ? 1000 : (p.rating * 10).round(),
           data: _PlaceEntity(p),
@@ -408,8 +455,8 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   Marker _placeMarker(Place p, bool selected) {
     return Marker(
       point: LatLng(p.lat, p.lng),
-      width: selected ? 110 : 86,
-      height: selected ? 46 : 38,
+      width: selected ? 160 : 40,
+      height: selected ? 66 : 40,
       child: GestureDetector(
         onTap: () {
           HapticFeedback.selectionClick();
@@ -527,6 +574,8 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               return Stack(
                 children: [
                   _buildMap(st, size),
+                  _topScrim(),
+                  if (st.selectedPlace != null) _bottomScrim(),
                   _buildTopControls(st),
                   _buildZoomControls(st),
                   if (st.selectedPlace != null) _buildPlaceCard(st.selectedPlace!),
@@ -663,9 +712,13 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(color: active ? AppColors.yellow : AppColors.navy.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(10), border: Border.all(color: active ? AppColors.yellow : AppColors.cardBorder)),
-                    child: Text(c.label, style: TextStyle(color: active ? AppColors.navy : AppColors.grey, fontWeight: FontWeight.w600, fontSize: 12)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(categoryIcon(c.value), size: 14, color: active ? AppColors.navy : AppColors.grey),
+                      const SizedBox(width: 5),
+                      Text(c.label, style: TextStyle(color: active ? AppColors.navy : AppColors.grey, fontWeight: FontWeight.w600, fontSize: 12)),
+                    ]),
                   ),
                 );
               }).toList(),
@@ -796,7 +849,59 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _topScrim() => Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 210,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [AppColors.navy.withValues(alpha: 0.85), AppColors.navy.withValues(alpha: 0.0)],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _bottomScrim() => Positioned(
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 180,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [AppColors.navy.withValues(alpha: 0.75), AppColors.navy.withValues(alpha: 0.0)],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  String _formatDistance(double meters) =>
+      meters < 1000 ? '${meters.round()} m' : '${(meters / 1000).toStringAsFixed(1)} km';
+
+  void _openDirections(Place p) {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => DirectionsScreen(destLat: p.lat, destLng: p.lng, destName: p.name),
+    ));
+  }
+
   Widget _buildPlaceCard(Place place) {
+    final color = categoryColor(place.category);
+    final ref = _controller.state.userLocation;
+    final distance = ref == null
+        ? null
+        : _formatDistance(haversineMeters(ref, LatLng(place.lat, place.lng)));
+
     return Positioned(
       left: 0,
       right: 0,
@@ -805,25 +910,78 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         onTap: () => context.push('/place/${place.id}'),
         child: Container(
           margin: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: AppColors.navyCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.cardBorder)),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(children: [
-              AppImage(url: place.imageUrl, width: 64, height: 64, borderRadius: BorderRadius.circular(10), fallbackIcon: Icons.place),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(place.category.toUpperCase(), style: const TextStyle(color: AppColors.yellow, fontSize: 9, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 3),
-                Text(place.name, style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                const SizedBox(height: 2),
-                Text(place.address, style: TextStyle(color: AppColors.grey, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ])),
-              Icon(Icons.arrow_forward_ios_rounded, color: AppColors.grey, size: 14),
-              GestureDetector(
-                onTap: _controller.clearSelection,
-                child: Padding(padding: const EdgeInsets.only(left: 8), child: Container(width: 28, height: 28, decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.close, color: AppColors.white, size: 14))),
-              ),
-            ]),
+          decoration: BoxDecoration(
+            color: AppColors.navyCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.cardBorder),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                // Category accent stripe
+                Container(width: 5, color: color),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(children: [
+                      AppImage(url: place.imageUrl, width: 60, height: 60, borderRadius: BorderRadius.circular(10), fallbackIcon: Icons.place),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                          Row(children: [
+                            Icon(categoryIcon(place.category), color: color, size: 12),
+                            const SizedBox(width: 4),
+                            Text(place.category.toUpperCase(), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Text(place.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Row(children: [
+                            const Icon(Icons.star_rounded, color: AppColors.yellow, size: 14),
+                            const SizedBox(width: 3),
+                            Text(place.rating.toStringAsFixed(1), style: TextStyle(color: AppColors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                            if (place.reviewCount > 0)
+                              Text(' (${place.reviewCount})', style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                            if (distance != null) ...[
+                              const SizedBox(width: 8),
+                              Container(width: 3, height: 3, decoration: BoxDecoration(color: AppColors.grey, shape: BoxShape.circle)),
+                              const SizedBox(width: 8),
+                              Icon(Icons.near_me_rounded, color: AppColors.grey, size: 12),
+                              const SizedBox(width: 3),
+                              Text(distance, style: TextStyle(color: AppColors.grey, fontSize: 12)),
+                            ],
+                          ]),
+                          const SizedBox(height: 3),
+                          Text(place.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                        ]),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        GestureDetector(
+                          onTap: _controller.clearSelection,
+                          child: Container(width: 26, height: 26, decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.close_rounded, color: AppColors.grey, size: 15)),
+                        ),
+                        GestureDetector(
+                          onTap: () => _openDirections(place),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.yellow,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: AppColors.yellow.withValues(alpha: 0.4), blurRadius: 8)],
+                            ),
+                            child: Icon(Icons.directions_rounded, color: AppColors.navy, size: 22),
+                          ),
+                        ),
+                      ]),
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
           ),
         ),
       ),
@@ -868,35 +1026,56 @@ class _MapMarker extends StatelessWidget {
   final bool selected;
   const _MapMarker({required this.place, required this.selected});
 
-  Color get _categoryColor {
-    switch (place.category.toLowerCase()) {
-      case 'transport':   return const Color(0xFF00BCD4);
-      case 'university':  return const Color(0xFF7C4DFF);
-      case 'restaurant':
-      case 'cafe':        return const Color(0xFFFF7043);
-      case 'hostel':      return const Color(0xFF66BB6A);
-      case 'hotel':       return const Color(0xFF26A69A);
-      case 'market':
-      case 'mall':        return const Color(0xFFAB47BC);
-      case 'hospital':    return const Color(0xFFEF5350);
-      case 'nightlife':   return const Color(0xFFEC407A);
-      default:            return AppColors.yellow;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final color = _categoryColor;
-    return AnimatedContainer(
+    final color = categoryColor(place.category);
+    final icon = categoryIcon(place.category);
+
+    final dot = AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      width: selected ? 42 : 34,
+      height: selected ? 42 : 34,
       decoration: BoxDecoration(
-        color: selected ? color : AppColors.navy.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: selected ? 0 : 1.5),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 2))],
+        color: selected ? color : AppColors.navy.withValues(alpha: 0.92),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected ? AppColors.white : color,
+          width: selected ? 2.5 : 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: selected ? 0.6 : 0.35),
+            blurRadius: selected ? 12 : 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Text(place.category, style: TextStyle(color: selected ? AppColors.navy : color, fontSize: 11, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+      child: Icon(icon, color: selected ? AppColors.white : color, size: selected ? 22 : 18),
+    );
+
+    if (!selected) return Center(child: dot);
+
+    // Selected: icon + a name label tag beneath it.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        dot,
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.navy.withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color, width: 1),
+          ),
+          child: Text(
+            place.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: AppColors.white, fontSize: 10, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
     );
   }
 }
