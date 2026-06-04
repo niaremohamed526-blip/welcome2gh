@@ -22,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _filter = 'All';
   Timer? _debounce;
   List<Place> _places = [];
+  List<Place> _featured = [];
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
@@ -36,8 +37,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadFeatured();
     _loadHero();
     _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadFeatured() async {
+    try {
+      // getPlaces() returns highest-rated first → real "top-rated" spots.
+      final f = await SupabaseService.instance.getPlaces(limit: 10);
+      if (mounted) setState(() => _featured = f);
+    } catch (_) {/* non-critical */}
   }
 
   Future<void> _loadHero() async {
@@ -113,27 +123,24 @@ class _HomeScreenState extends State<HomeScreen> {
     _debounce = Timer(const Duration(milliseconds: 400), _load);
   }
 
-  void _showQuickActions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.navyCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('QUICK ACTIONS', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 16),
-            _quickAction(Icons.add_location_alt_rounded, 'Add a Place', 'Share a spot with the community', () { Navigator.pop(context); context.push('/add-place').then((_) { if (mounted) _load(); }); }),
-            _quickAction(Icons.attach_money_rounded, 'Report Fair Price', 'Help others avoid scams', () { Navigator.pop(context); context.push('/fair-price'); }),
-            _quickAction(Icons.auto_awesome_rounded, 'Ask the AI Guide', 'Get instant local tips', () { Navigator.pop(context); context.push('/ai'); }),
-            _quickAction(Icons.warning_amber_rounded, 'Report Safety Issue', 'Alert nearby travelers', () {
-              Navigator.pop(context);
-              _showSafetyReport(context);
-            }, color: const Color(0xFFEF5350)),
-            const SizedBox(height: 8),
-          ]),
-        ),
+  Widget _quickTile(IconData icon, String label, Color color, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(children: [
+          Container(
+            width: 54, height: 54,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 7),
+          Text(label, style: TextStyle(color: AppColors.greyLight, fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
       ),
     );
   }
@@ -216,40 +223,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _quickAction(IconData icon, String title, String subtitle, VoidCallback onTap, {Color color = AppColors.yellow}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.3))),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-            const SizedBox(height: 3),
-            Text(subtitle, style: TextStyle(color: AppColors.grey, fontSize: 12)),
-          ])),
-          Icon(Icons.chevron_right_rounded, color: AppColors.grey, size: 18),
-        ]),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.navy,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.yellow,
-        foregroundColor: AppColors.navy,
-        onPressed: () => _showQuickActions(context),
-        child: const Icon(Icons.add_rounded),
-      ),
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.yellow,
@@ -269,68 +246,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => context.go(_hero['cta_route'] ?? '/map'),
                 ),
               ),
+              // Quick actions (replaces the floating + button)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('EXPLORE', style: Theme.of(context).textTheme.labelSmall),
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+                  child: Row(children: [
+                    _quickTile(Icons.add_location_alt_rounded, 'Add Place', AppColors.yellow,
+                        () => context.push('/add-place').then((_) { if (mounted) { _load(); _loadFeatured(); } })),
+                    _quickTile(Icons.attach_money_rounded, 'Fair Price', const Color(0xFF66BB6A),
+                        () => context.push('/fair-price')),
+                    _quickTile(Icons.auto_awesome_rounded, 'AI Guide', const Color(0xFF7C4DFF),
+                        () => context.push('/ai')),
+                    _quickTile(Icons.warning_amber_rounded, 'Safety', const Color(0xFFEF5350),
+                        () => _showSafetyReport(context)),
+                  ]),
+                ),
+              ),
+              // Featured: real top-rated places from the database
+              if (_featured.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('FEATURED', style: Theme.of(context).textTheme.labelSmall),
                       const SizedBox(height: 4),
-                      Text('THREE WORLDS.\nONE ACCRA.', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 26)),
-                    ],
+                      Text('Top-rated in Accra', style: Theme.of(context).textTheme.headlineMedium),
+                    ]),
                   ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                  child: Text(
-                    'Curated spots to experience Ghana\'s capital alongside its people, with live IoT data guiding every step.',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 210,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      itemCount: _featured.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (_, i) => _FeaturedCard(place: _featured[i]),
+                    ),
                   ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 300,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    children: [
-                      _WorldCard(
-                        number: '01',
-                        title: 'LOCAL\nFLAVORS',
-                        description: 'Jollof, banku and waakye served at the city\'s best spots.',
-                        tag: 'TAP TO EXPLORE',
-                        icon: Icons.restaurant_rounded,
-                        imageUrl: 'https://images.unsplash.com/photo-1567533379826-a0bee5eef2e8?w=600',
-                        onTap: () => setState(() { _filter = 'Restaurant'; _load(); }),
-                      ),
-                      const SizedBox(width: 12),
-                      _WorldCard(
-                        number: '02',
-                        title: 'URBAN\nRETREATS',
-                        description: 'Student hostels and boutique hotels to drop your bags with confidence.',
-                        tag: 'TAP TO EXPLORE',
-                        icon: Icons.hotel_rounded,
-                        imageUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=600',
-                        onTap: () => setState(() { _filter = 'Hostel'; _load(); }),
-                      ),
-                      const SizedBox(width: 12),
-                      _WorldCard(
-                        number: '03',
-                        title: 'LIVING\nMOBILITY',
-                        description: 'Trotros, Ubers and taxi stands to cross Accra. IoT sensors live.',
-                        tag: 'TAP TO EXPLORE',
-                        icon: Icons.directions_bus_rounded,
-                        imageUrl: 'https://images.unsplash.com/photo-1558618666-fce25c85ce64?w=600',
-                        onTap: () => setState(() { _filter = 'Transport'; _load(); }),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              ],
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 32, 0, 0),
@@ -494,46 +450,52 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-class _WorldCard extends StatelessWidget {
-  final String number, title, description, tag, imageUrl;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _WorldCard({required this.number, required this.title, required this.description, required this.tag, required this.icon, required this.imageUrl, required this.onTap});
+/// Featured card showing a real place from the database.
+class _FeaturedCard extends StatelessWidget {
+  final Place place;
+  const _FeaturedCard({required this.place});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 260,
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.cardBorder)),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PlaceDetailsScreen(placeId: place.id))),
+      child: SizedBox(
+        width: 200,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              AppImage(url: imageUrl, fit: BoxFit.cover, fallbackIcon: Icons.photo),
-              Container(color: AppColors.navy.withValues(alpha: 0.65)),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(number, style: TextStyle(color: AppColors.grey, fontSize: 12, fontWeight: FontWeight.w700)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: AppColors.navyCard.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.cardBorder)),
-                      child: Icon(icon, color: AppColors.yellow, size: 20),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(title, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 18)),
-                    const SizedBox(height: 6),
-                    Text(description, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11, height: 1.5)),
-                    const SizedBox(height: 10),
-                    Text(tag, style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9)),
-                  ],
+              AppImage(url: place.imageUrl, fit: BoxFit.cover, fallbackIcon: Icons.place),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, AppColors.navy.withValues(alpha: 0.55), AppColors.navy.withValues(alpha: 0.95)],
+                    stops: const [0.25, 0.6, 1.0],
+                  ),
                 ),
+              ),
+              Positioned(top: 12, left: 12, child: _CategoryChip(label: place.category)),
+              if (place.verified)
+                const Positioned(top: 12, right: 12, child: Icon(Icons.verified_rounded, color: AppColors.yellow, size: 18)),
+              Positioned(
+                left: 12, right: 12, bottom: 12,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(place.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15, height: 1.2)),
+                  const SizedBox(height: 5),
+                  Row(children: [
+                    const Icon(Icons.star_rounded, color: AppColors.yellow, size: 14),
+                    const SizedBox(width: 3),
+                    Text('${place.rating}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 4),
+                    Text('(${place.reviewCount})', style: TextStyle(color: AppColors.greyLight, fontSize: 11)),
+                    const Spacer(),
+                    Text(place.priceLevel, style: const TextStyle(color: AppColors.yellow, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ]),
+                ]),
               ),
             ],
           ),
