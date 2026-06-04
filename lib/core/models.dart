@@ -87,6 +87,8 @@ class CommunityPost {
   final String category;
   final String content;
   final String? imageUrl;
+  final String? videoUrl;
+  final String mediaType; // 'image' | 'video'
   final int likes;
   final int comments;
   final DateTime createdAt;
@@ -99,11 +101,15 @@ class CommunityPost {
     required this.category,
     required this.content,
     this.imageUrl,
+    this.videoUrl,
+    this.mediaType = 'image',
     required this.likes,
     required this.comments,
     required this.createdAt,
     this.authorId,
   });
+
+  bool get hasVideo => mediaType == 'video' && videoUrl != null && videoUrl!.isNotEmpty;
 
   factory CommunityPost.fromJson(Map<String, dynamic> j) {
     final profile = j['profiles'] as Map<String, dynamic>?;
@@ -116,6 +122,8 @@ class CommunityPost {
       category: _capitalize((j['category'] ?? 'general').toString().replaceAll('_', ' ')),
       content: j['content'] ?? '',
       imageUrl: j['image_url'],
+      videoUrl: j['video_url'],
+      mediaType: (j['media_type'] ?? 'image').toString(),
       likes: (j['likes_count'] as num?)?.toInt() ?? 0,
       comments: (j['comments_count'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.tryParse(j['created_at'] ?? '') ?? DateTime.now(),

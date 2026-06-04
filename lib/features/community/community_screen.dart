@@ -1,11 +1,13 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:video_player/video_player.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/time_utils.dart';
 import '../../core/models.dart';
 import '../../core/supabase_service.dart';
 import '../../core/image_upload.dart';
 import '../../shared/widgets/app_image.dart';
+import '../notifications/notifications_screen.dart';
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
@@ -49,6 +51,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     Text('THE FEED.', style: Theme.of(context).textTheme.displaySmall),
                   ]),
                   const Spacer(),
+                  const _NotificationBell(),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => setState(() => _stream = SupabaseService.instance.watchPosts()),
                     child: Container(
@@ -112,10 +116,19 @@ class _CommunityScreenState extends State<CommunityScreen> {
                       ],
                     ));
                   }
-                  return ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: posts.length,
-                    itemBuilder: (_, i) => _PostCard(post: posts[i]),
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      setState(() => _stream = SupabaseService.instance.watchPosts());
+                      await Future.delayed(const Duration(milliseconds: 400));
+                    },
+                    color: AppColors.yellow,
+                    backgroundColor: AppColors.navyCard,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 24),
+                      itemCount: posts.length,
+                      itemBuilder: (_, i) => _PostCard(post: posts[i]),
+                    ),
                   );
                 },
               ),
@@ -126,10 +139,35 @@ class _CommunityScreenState extends State<CommunityScreen> {
     );
   }
 
+  Widget _mediaPickBtn({required IconData icon, required String label, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.cardBorder)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: AppColors.grey, size: 18),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(color: AppColors.grey, fontSize: 13)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _removeMediaBtn(VoidCallback onTap) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 28, height: 28,
+          decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+          child: const Icon(Icons.close, color: Colors.white, size: 16),
+        ),
+      );
+
   void _showNewPost(BuildContext context) {
     final ctrl = TextEditingController();
     String category = 'General';
     String? postPhoto;
+    String? postVideo;
     final cats = ['General', 'Safety', 'Food', 'Transport', 'Accommodation', 'Events', 'Scam Alert', 'Student Life'];
 
     showModalBottomSheet(
@@ -174,29 +212,36 @@ class _CommunityScreenState extends State<CommunityScreen> {
                 decoration: InputDecoration(hintText: 'What\'s happening in Accra?'),
               ),
               const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () async {
-                  final url = await ImageUploadHelper.pickAndUpload(ctx, bucket: 'posts');
-                  if (url != null) setSh(() => postPhoto = url);
-                },
-                child: Container(
-                  height: postPhoto != null ? 140 : 48,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppColors.navy,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.cardBorder),
-                    image: postPhoto != null ? DecorationImage(image: NetworkImage(postPhoto!), fit: BoxFit.cover) : null,
+              if (postPhoto != null)
+                Stack(children: [
+                  ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(postPhoto!, height: 140, width: double.infinity, fit: BoxFit.cover)),
+                  Positioned(top: 6, right: 6, child: _removeMediaBtn(() => setSh(() => postPhoto = null))),
+                ])
+              else if (postVideo != null)
+                Stack(children: [
+                  Container(
+                    height: 90, width: double.infinity,
+                    decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.cardBorder)),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.videocam_rounded, color: AppColors.yellow, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Video attached', style: TextStyle(color: AppColors.greyLight, fontSize: 13)),
+                    ]),
                   ),
-                  child: postPhoto == null
-                      ? Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Icon(Icons.add_a_photo_rounded, color: AppColors.grey, size: 18),
-                          SizedBox(width: 8),
-                          Text('Add a photo (optional)', style: TextStyle(color: AppColors.grey, fontSize: 13)),
-                        ])
-                      : null,
-                ),
-              ),
+                  Positioned(top: 6, right: 6, child: _removeMediaBtn(() => setSh(() => postVideo = null))),
+                ])
+              else
+                Row(children: [
+                  Expanded(child: _mediaPickBtn(icon: Icons.add_a_photo_rounded, label: 'Photo', onTap: () async {
+                    final url = await ImageUploadHelper.pickAndUpload(ctx, bucket: 'posts');
+                    if (url != null) setSh(() { postPhoto = url; postVideo = null; });
+                  })),
+                  const SizedBox(width: 10),
+                  Expanded(child: _mediaPickBtn(icon: Icons.videocam_rounded, label: 'Video', onTap: () async {
+                    final url = await ImageUploadHelper.pickAndUploadVideo(ctx, bucket: 'posts');
+                    if (url != null) setSh(() { postVideo = url; postPhoto = null; });
+                  })),
+                ]),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -207,7 +252,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     final messenger = ScaffoldMessenger.of(context);
                     Navigator.pop(ctx);
                     try {
-                      await SupabaseService.instance.createPost(content: text, category: category, imageUrl: postPhoto);
+                      await SupabaseService.instance.createPost(content: text, category: category, imageUrl: postPhoto, videoUrl: postVideo);
                       if (!mounted) return;
                       messenger.showSnackBar(
                         const SnackBar(content: Text('Post shared!'), backgroundColor: AppColors.green),
@@ -240,6 +285,7 @@ class _PostCard extends StatefulWidget {
 
 class _PostCardState extends State<_PostCard> {
   bool _liked = false;
+  bool _favorited = false;
   late int _likeCount;
   late int _commentCount;
 
@@ -249,6 +295,83 @@ class _PostCardState extends State<_PostCard> {
     _likeCount = widget.post.likes;
     _commentCount = widget.post.comments;
     _checkLiked();
+    _checkFavorited();
+  }
+
+  Future<void> _checkFavorited() async {
+    final fav = await SupabaseService.instance.isPostFavorited(widget.post.id);
+    if (mounted && fav != _favorited) setState(() => _favorited = fav);
+  }
+
+  bool get _isMine => widget.post.authorId != null && widget.post.authorId == SupabaseService.instance.currentUser?.id;
+
+  Future<void> _toggleFavorite() async {
+    setState(() => _favorited = !_favorited); // optimistic
+    try {
+      final now = await SupabaseService.instance.togglePostFavorite(widget.post.id);
+      if (mounted && now != _favorited) setState(() => _favorited = now);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_favorited ? 'Saved to your posts' : 'Removed from saved'),
+          backgroundColor: AppColors.navyCard,
+          duration: const Duration(seconds: 1),
+        ));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _favorited = !_favorited);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red));
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.navyCard,
+        title: Text('Delete post?', style: TextStyle(color: AppColors.white)),
+        content: Text('This removes your post from the feed.', style: TextStyle(color: AppColors.greyLight)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: TextStyle(color: AppColors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await SupabaseService.instance.deleteMyPost(widget.post.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Post deleted'), backgroundColor: AppColors.green));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red));
+    }
+  }
+
+  Future<void> _reportPost() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.navyCard,
+        title: Text('Report this post?', style: TextStyle(color: AppColors.white)),
+        content: Text('Our team will review it for violating community guidelines.', style: TextStyle(color: AppColors.greyLight)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: TextStyle(color: AppColors.grey))),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('REPORT')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await SupabaseService.instance.reportPost(widget.post.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Thanks — post reported'), backgroundColor: AppColors.green));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red));
+    }
   }
 
   @override
@@ -317,10 +440,13 @@ class _PostCardState extends State<_PostCard> {
               decoration: BoxDecoration(color: _categoryColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: _categoryColor.withValues(alpha: 0.3))),
               child: Text(p.category.toUpperCase(), style: TextStyle(color: _categoryColor, fontSize: 9, fontWeight: FontWeight.w700)),
             ),
+            _postMenu(),
           ]),
         ),
         Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 14), child: Text(p.content, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6, fontSize: 14))),
-        if (p.imageUrl != null)
+        if (p.hasVideo)
+          _PostVideo(url: p.videoUrl!)
+        else if (p.imageUrl != null)
           GestureDetector(
             onTap: () => _openImageViewer(context, p.imageUrl!),
             child: Stack(alignment: Alignment.bottomRight, children: [
@@ -358,12 +484,43 @@ class _PostCardState extends State<_PostCard> {
             ),
             const Spacer(),
             GestureDetector(
+              onTap: _toggleFavorite,
+              child: Icon(_favorited ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded, color: _favorited ? AppColors.yellow : AppColors.grey, size: 18),
+            ),
+            const SizedBox(width: 18),
+            GestureDetector(
               onTap: () => Share.share('${p.authorName} on Welcome2GH:\n\n${p.content}'),
               child: Icon(Icons.share_outlined, color: AppColors.grey, size: 18),
             ),
           ]),
         ),
       ]),
+    );
+  }
+
+  Widget _postMenu() {
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.more_vert_rounded, color: AppColors.grey, size: 18),
+      color: AppColors.navyCard,
+      padding: EdgeInsets.zero,
+      onSelected: (v) {
+        if (v == 'delete') _confirmDelete();
+        if (v == 'report') _reportPost();
+      },
+      itemBuilder: (_) => [
+        if (_isMine)
+          PopupMenuItem(value: 'delete', child: Row(children: [
+            Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 18),
+            const SizedBox(width: 10),
+            Text('Delete post', style: TextStyle(color: AppColors.white)),
+          ]))
+        else
+          PopupMenuItem(value: 'report', child: Row(children: [
+            Icon(Icons.flag_outlined, color: AppColors.grey, size: 18),
+            const SizedBox(width: 10),
+            Text('Report post', style: TextStyle(color: AppColors.white)),
+          ])),
+      ],
     );
   }
 
@@ -438,6 +595,126 @@ class _ImageViewer extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// Inline video player for a post — tap to play/pause, scrubbable progress.
+class _PostVideo extends StatefulWidget {
+  final String url;
+  const _PostVideo({required this.url});
+
+  @override
+  State<_PostVideo> createState() => _PostVideoState();
+}
+
+class _PostVideoState extends State<_PostVideo> {
+  VideoPlayerController? _ctrl;
+  bool _ready = false;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _ctrl = c;
+    try {
+      await c.initialize();
+      await c.setLooping(true);
+      if (mounted) setState(() => _ready = true);
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    final c = _ctrl;
+    if (c == null || !c.value.isInitialized) return;
+    c.value.isPlaying ? c.pause() : c.play();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _ctrl;
+    if (_failed) {
+      return Container(
+        height: 180, color: AppColors.navy,
+        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.videocam_off_rounded, color: AppColors.grey, size: 28),
+          const SizedBox(height: 6),
+          Text('Video unavailable', style: TextStyle(color: AppColors.grey, fontSize: 12)),
+        ])),
+      );
+    }
+    if (!_ready || c == null || !c.value.isInitialized) {
+      return Container(height: 200, color: AppColors.navy, child: const Center(child: CircularProgressIndicator(color: AppColors.yellow)));
+    }
+    final ar = c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio;
+    return GestureDetector(
+      onTap: _toggle,
+      child: Stack(alignment: Alignment.center, children: [
+        AspectRatio(aspectRatio: ar, child: VideoPlayer(c)),
+        ValueListenableBuilder<VideoPlayerValue>(
+          valueListenable: c,
+          builder: (_, value, __) => value.isPlaying
+              ? const SizedBox.shrink()
+              : Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+                ),
+        ),
+        Positioned(
+          left: 0, right: 0, bottom: 0,
+          child: VideoProgressIndicator(c, allowScrubbing: true,
+              colors: VideoProgressColors(playedColor: AppColors.yellow, bufferedColor: Colors.white24, backgroundColor: Colors.white10)),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Bell icon with a live unread badge; opens the Notifications screen.
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: SupabaseService.instance.watchNotifications(),
+      builder: (context, snap) {
+        final unread = (snap.data ?? []).where((n) => n['read'] != true).length;
+        return GestureDetector(
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+          child: Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: AppColors.navyCard, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.cardBorder)),
+            child: Stack(alignment: Alignment.center, children: [
+              Icon(Icons.notifications_none_rounded, color: AppColors.grey, size: 18),
+              if (unread > 0)
+                Positioned(
+                  top: 5, right: 5,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                    decoration: const BoxDecoration(color: Color(0xFFEF5350), shape: BoxShape.circle),
+                    child: Text(unread > 9 ? '9+' : '$unread', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+            ]),
+          ),
+        );
+      },
     );
   }
 }

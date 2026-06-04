@@ -54,7 +54,51 @@ class ImageUploadHelper {
     }
   }
 
-  static Future<ImageSource?> _chooseSource(BuildContext context) {
+  /// Picks a video (gallery or camera) and uploads it. Returns the URL or null.
+  static Future<String?> pickAndUploadVideo(
+    BuildContext context, {
+    required String bucket,
+    String? folder,
+  }) async {
+    final source = await _chooseSource(context, video: true);
+    if (source == null) return null;
+
+    final XFile? file = await _picker.pickVideo(
+      source: source,
+      maxDuration: const Duration(seconds: 60),
+    );
+    if (file == null) return null;
+
+    if (!context.mounted) return null;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _UploadingDialog(label: 'Uploading video…'),
+    );
+
+    try {
+      final bytes = await file.readAsBytes();
+      final ext = file.name.contains('.') ? file.name.split('.').last : 'mp4';
+      final url = await SupabaseService.instance.uploadVideoBytes(
+        bucket: bucket,
+        bytes: bytes,
+        extension: ext,
+        folder: folder,
+      );
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+      return url;
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.red),
+        );
+      }
+      return null;
+    }
+  }
+
+  static Future<ImageSource?> _chooseSource(BuildContext context, {bool video = false}) {
     return showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppColors.navyCard,
@@ -65,13 +109,13 @@ class ImageUploadHelper {
           Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.grey.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 16),
           ListTile(
-            leading: const Icon(Icons.camera_alt_rounded, color: AppColors.yellow),
-            title: Text('Take a photo', style: TextStyle(color: AppColors.white)),
+            leading: Icon(video ? Icons.videocam_rounded : Icons.camera_alt_rounded, color: AppColors.yellow),
+            title: Text(video ? 'Record a video' : 'Take a photo', style: TextStyle(color: AppColors.white)),
             onTap: () => Navigator.pop(context, ImageSource.camera),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_rounded, color: AppColors.yellow),
-            title: Text('Choose from gallery', style: TextStyle(color: AppColors.white)),
+            title: Text(video ? 'Choose a video' : 'Choose from gallery', style: TextStyle(color: AppColors.white)),
             onTap: () => Navigator.pop(context, ImageSource.gallery),
           ),
           const SizedBox(height: 12),
@@ -82,7 +126,8 @@ class ImageUploadHelper {
 }
 
 class _UploadingDialog extends StatelessWidget {
-  const _UploadingDialog();
+  final String label;
+  const _UploadingDialog({this.label = 'Uploading photo…'});
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +139,7 @@ class _UploadingDialog extends StatelessWidget {
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.yellow)),
           const SizedBox(width: 18),
-          Text('Uploading photo…', style: TextStyle(color: AppColors.white, fontSize: 14)),
+          Text(label, style: TextStyle(color: AppColors.white, fontSize: 14)),
         ]),
       ),
     );

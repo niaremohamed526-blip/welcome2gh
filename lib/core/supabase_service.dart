@@ -284,6 +284,7 @@ class SupabaseService {
     required String content,
     String category = 'general',
     String? imageUrl,
+    String? videoUrl,
   }) async {
     final id = currentUser?.id;
     if (id == null) throw Exception('Sign in to post');
@@ -292,7 +293,71 @@ class SupabaseService {
       'content': content,
       'category': category.toLowerCase().replaceAll(' ', '_'),
       'image_url': imageUrl,
+      'video_url': videoUrl,
+      'media_type': videoUrl != null ? 'video' : 'image',
     });
+  }
+
+  /// Soft-delete the current user's own post (RLS allows the author).
+  Future<void> deleteMyPost(String postId) async {
+    await _client.from('posts').update({'active': false}).eq('id', postId);
+  }
+
+  Future<void> reportPost(String postId, {String? reason}) async {
+    final id = currentUser?.id;
+    if (id == null) throw Exception('Sign in to report');
+    await _client.from('post_reports').insert({
+      'post_id': postId,
+      'reporter_id': id,
+      'reason': reason,
+    });
+  }
+
+  // ─── POST FAVORITES ─────────────────────────────────────────────────────
+
+  Future<bool> isPostFavorited(String postId) async {
+    final id = currentUser?.id;
+    if (id == null) return false;
+    final row = await _client
+        .from('post_favorites')
+        .select()
+        .eq('post_id', postId)
+        .eq('user_id', id)
+        .maybeSingle();
+    return row != null;
+  }
+
+  /// Toggles favourite; returns the new state (true = now favourited).
+  Future<bool> togglePostFavorite(String postId) async {
+    final id = currentUser?.id;
+    if (id == null) throw Exception('Sign in to save posts');
+    final existing = await _client
+        .from('post_favorites')
+        .select()
+        .eq('post_id', postId)
+        .eq('user_id', id)
+        .maybeSingle();
+    if (existing == null) {
+      await _client.from('post_favorites').insert({'post_id': postId, 'user_id': id});
+      return true;
+    }
+    await _client.from('post_favorites').delete().eq('post_id', postId).eq('user_id', id);
+    return false;
+  }
+
+  Future<List<CommunityPost>> getFavoritePosts() async {
+    final id = currentUser?.id;
+    if (id == null) return [];
+    final rows = await _client
+        .from('post_favorites')
+        .select('post:post_id(*, profiles:author_id(name, profile_image))')
+        .eq('user_id', id)
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .map((r) => r['post'])
+        .where((p) => p != null && p['active'] == true)
+        .map((p) => CommunityPost.fromJson(p as Map<String, dynamic>))
+        .toList();
   }
 
   Future<bool> isPostLiked(String postId) async {
@@ -470,6 +535,25 @@ class SupabaseService {
 
   Future<void> markNotificationRead(String id) async {
     await _client.from('notifications').update({'read': true}).eq('id', id);
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final uid = currentUser?.id;
+    if (uid == null) return;
+    await _client.from('notifications').update({'read': true}).eq('user_id', uid).eq('read', false);
+  }
+
+  /// Live stream of the current user's notifications (realtime).
+  Stream<List<Map<String, dynamic>>> watchNotifications() {
+    final uid = currentUser?.id;
+    if (uid == null) return Stream.value(const []);
+    return _client
+        .from('notifications')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', uid)
+        .order('created_at', ascending: false)
+        .limit(50)
+        .map((rows) => List<Map<String, dynamic>>.from(rows));
   }
 
   Future<int> getUnreadNotificationCount() async {
@@ -709,6 +793,28 @@ class SupabaseService {
           fileOptions: FileOptions(
             upsert: true,
             contentType: 'image/${ext == 'jpg' ? 'jpeg' : ext}',
+          ),
+        );
+    return _client.storage.from(bucket).getPublicUrl(path);
+  }
+
+  /// Upload a video's bytes to [bucket] and return the public URL.
+  Future<String> uploadVideoBytes({
+    required String bucket,
+    required Uint8List bytes,
+    String extension = 'mp4',
+    String? folder,
+  }) async {
+    final uid = currentUser?.id ?? 'anon';
+    final ext = extension.replaceAll('.', '').toLowerCase();
+    final path =
+        '${folder == null ? '' : '$folder/'}${uid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    await _client.storage.from(bucket).uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: 'video/${ext == 'mov' ? 'quicktime' : ext}',
           ),
         );
     return _client.storage.from(bucket).getPublicUrl(path);
