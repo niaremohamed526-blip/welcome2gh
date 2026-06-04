@@ -332,7 +332,12 @@ class SupabaseService {
         .eq('active', true)
         .order('created_at', ascending: false)
         .limit(20);
-    return (rows as List).map((r) => AlertItem.fromJson(r)).toList();
+    // Drop alerts whose expiry has passed — matches the DB's nearby_alerts()
+    // function, which also excludes expired alerts.
+    return (rows as List)
+        .map((r) => AlertItem.fromJson(r))
+        .where((a) => !a.isExpired)
+        .toList();
   }
 
   Stream<List<AlertItem>> watchAlerts() {

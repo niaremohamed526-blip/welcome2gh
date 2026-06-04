@@ -165,7 +165,9 @@ class AlertItem {
   final String description;
   final double? lat;
   final double? lng;
+  final double radiusMeters;
   final DateTime createdAt;
+  final DateTime? expiresAt;
 
   const AlertItem({
     required this.id,
@@ -175,8 +177,16 @@ class AlertItem {
     required this.description,
     this.lat,
     this.lng,
+    this.radiusMeters = 1000,
     required this.createdAt,
+    this.expiresAt,
   });
+
+  /// True when the alert has a coordinate and can be drawn on the map.
+  bool get isMappable => lat != null && lng != null;
+
+  /// True when the alert has passed its expiry time.
+  bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
 
   factory AlertItem.fromJson(Map<String, dynamic> j) => AlertItem(
         id: j['id'].toString(),
@@ -186,7 +196,11 @@ class AlertItem {
         description: j['description'] ?? '',
         lat: (j['lat'] as num?)?.toDouble(),
         lng: (j['lng'] as num?)?.toDouble(),
+        radiusMeters: (j['radius_meters'] as num?)?.toDouble() ?? 1000,
         createdAt: DateTime.tryParse(j['created_at'] ?? '') ?? DateTime.now(),
+        expiresAt: j['expires_at'] != null
+            ? DateTime.tryParse(j['expires_at'].toString())
+            : null,
       );
 }
 

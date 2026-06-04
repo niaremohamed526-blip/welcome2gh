@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/user_location_dot.dart';
+import '../../core/geo/geo_math.dart';
 
 // â”€â”€ Data model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -276,19 +277,18 @@ class _DirectionsScreenState extends State<DirectionsScreen> {
   void _updateCurrentStep() {
     if (_steps.isEmpty || _userLocation == null || _routePoints.isEmpty) return;
 
-    // Find closest route point to user
-    final dist = const Distance();
+    // Find closest route point to user (distance via the central geo utility)
     double minD = double.infinity;
     int closestIdx = 0;
     for (int i = 0; i < _routePoints.length; i++) {
-      final d = dist(_userLocation!, _routePoints[i]);
+      final d = haversineMeters(_userLocation!, _routePoints[i]);
       if (d < minD) { minD = d; closestIdx = i; }
     }
 
     // Sum segment lengths from route start to closest point = approx distance traveled
     double traveled = 0;
     for (int i = 0; i < closestIdx; i++) {
-      traveled += dist(_routePoints[i], _routePoints[i + 1]);
+      traveled += haversineMeters(_routePoints[i], _routePoints[i + 1]);
     }
 
     // Find which step the user is currently in by cumulative step distances
