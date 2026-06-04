@@ -678,11 +678,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       ),
       children: [
         TileLayer(
-          // Theme-aware basemap: dark tiles in dark mode (markers pop), the
-          // softer Voyager style in light mode.
-          urlTemplate: Theme.of(context).brightness == Brightness.dark
-              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-              : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+          urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
           subdomains: const ['a', 'b', 'c', 'd'],
           userAgentPackageName: 'com.welcome2gh',
           maxNativeZoom: 19,
