@@ -129,7 +129,7 @@ class SupabaseService {
   }
 
   Future<Place?> getPlace(String id) async {
-    final row = await _client.from('places').select().eq('id', id).maybeSingle();
+    final row = await _client.from('places').select().eq('id', id).eq('active', true).maybeSingle();
     return row == null ? null : Place.fromJson(row);
   }
 
@@ -254,6 +254,7 @@ class SupabaseService {
     return _client
         .from('posts')
         .stream(primaryKey: ['id'])
+        .eq('active', true)
         .order('created_at', ascending: false)
         .limit(50)
         .asyncMap((rows) async {
@@ -338,6 +339,7 @@ class SupabaseService {
     return _client
         .from('alerts')
         .stream(primaryKey: ['id'])
+        .eq('active', true)
         .order('created_at', ascending: false)
         .limit(20)
         .map((rows) => rows.map((r) => AlertItem.fromJson(r)).toList());
@@ -613,9 +615,12 @@ class SupabaseService {
   }
 
   Future<List<CommunityPost>> getAllPostsForAdmin() async {
+    // Only show active posts — soft-deleted ones (active = false) should
+    // disappear from the admin list just like they do for the public feed.
     final rows = await _client
         .from('posts')
         .select('*, profiles:author_id(name, profile_image)')
+        .eq('active', true)
         .order('created_at', ascending: false)
         .limit(200);
     return (rows as List).map((r) => CommunityPost.fromJson(r)).toList();
@@ -643,7 +648,14 @@ class SupabaseService {
   }
 
   Future<List<AlertItem>> getAllAlertsForAdmin() async {
-    final rows = await _client.from('alerts').select().order('created_at', ascending: false).limit(200);
+    // Only show active alerts — soft-deleted ones (active = false) should
+    // disappear from the admin list just like they do for the public.
+    final rows = await _client
+        .from('alerts')
+        .select()
+        .eq('active', true)
+        .order('created_at', ascending: false)
+        .limit(200);
     return (rows as List).map((r) => AlertItem.fromJson(r)).toList();
   }
 
