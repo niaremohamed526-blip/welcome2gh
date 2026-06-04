@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/supabase_service.dart';
+import '../../core/geo/geo_math.dart';
 import '../../core/geo/marker_layout.dart';
 import '../../shared/widgets/app_image.dart';
 import '../../shared/widgets/user_location_dot.dart';
@@ -88,7 +89,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
 
   // ── Data ────────────────────────────────────────────────────────────────
 
-  Future<void> _load() async {
+  Future<void> _load({bool focusNearest = false}) async {
     _controller.startLoading();
     final st = _controller.state;
     try {
@@ -105,17 +106,42 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       final alerts = results[1] as List<AlertItem>;
       _controller.setData(places: places, alerts: alerts);
 
-      // Auto-frame search results — but never while following the user, so the
-      // two don't fight over the camera.
-      if (st.search.trim().isNotEmpty &&
-          places.isNotEmpty &&
-          !_controller.state.followUser) {
+      if (places.isEmpty) return;
+      if (st.search.trim().isNotEmpty && !_controller.state.followUser) {
+        // Auto-frame search results.
         _fitToPlaces(places);
+      } else if (focusNearest && st.filter != 'All') {
+        // Category tapped — fly to the nearest one to the user.
+        _focusNearestTo(places);
       }
     } catch (e) {
       if (!mounted) return;
       _controller.setError(e.toString());
     }
+  }
+
+  /// Fly the camera to the place closest to the user's live location (falling
+  /// back to the current map centre, then to framing everything). The nearest
+  /// place is also selected so its card pops up.
+  void _focusNearestTo(List<Place> places) {
+    final ref = _controller.state.userLocation ?? _mapController.camera.center;
+    Place? nearest;
+    var best = double.infinity;
+    for (final p in places) {
+      final d = haversineMeters(ref, LatLng(p.lat, p.lng));
+      if (d < best) {
+        best = d;
+        nearest = p;
+      }
+    }
+    if (nearest == null) {
+      _fitToPlaces(places);
+      return;
+    }
+    // Stop following so the GPS stream doesn't immediately pull the camera back.
+    _controller.setFollow(false);
+    _controller.select(nearest.id);
+    _animatedMove(LatLng(nearest.lat, nearest.lng), 16);
   }
 
   void _onSearchChanged(String value) {
@@ -630,7 +656,9 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                 return GestureDetector(
                   onTap: () {
                     _controller.setFilter(c.value);
-                    _load();
+                    // Tapping a category flies to the nearest match; 'All' just
+                    // reloads without moving the camera.
+                    _load(focusNearest: c.value != 'All');
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
