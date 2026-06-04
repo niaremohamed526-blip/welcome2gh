@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/supabase_service.dart';
+import '../../core/routing_service.dart';
 import '../../core/geo/geo_math.dart';
 import '../../core/geo/marker_layout.dart';
 import '../../shared/widgets/app_image.dart';
@@ -122,6 +123,11 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   LatLng? _loadAnchor; // map centre when the current results were loaded
   Size? _lastMapSize; // last known map widget size (for viewport math)
 
+  // Real routed ETA for the currently selected place's card.
+  String? _etaPlaceId;
+  bool _etaLoading = false;
+  ({int walkMin, int driveMin})? _eta;
+
   static const double _minZoom = 3;
   static const double _maxZoom = 19;
 
@@ -215,7 +221,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     }
     // Stop following so the GPS stream doesn't immediately pull the camera back.
     _controller.setFollow(false);
-    _controller.select(nearest.id);
+    _selectPlace(nearest.id);
     _animatedMove(LatLng(nearest.lat, nearest.lng), 16);
   }
 
@@ -302,6 +308,63 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   void _zoomBy(double delta) {
     final c = _mapController.camera;
     _mapController.move(c.center, (c.zoom + delta).clamp(_minZoom, _maxZoom));
+  }
+
+  // ── Selection + routed ETA ─────────────────────────────────────────────────
+
+  void _selectPlace(String id) {
+    HapticFeedback.selectionClick();
+    _controller.select(id);
+    final place = _controller.state.selectedPlace;
+    if (place != null) _fetchEta(place);
+  }
+
+  void _clearSelection() {
+    _controller.clearSelection();
+    setState(() {
+      _etaPlaceId = null;
+      _eta = null;
+      _etaLoading = false;
+    });
+  }
+
+  /// Fetch the real walk + drive time from the user to [p] via OSRM and show it
+  /// on the card. No-op (shows nothing) when the user's location is unknown.
+  Future<void> _fetchEta(Place p) async {
+    final ref = _controller.state.userLocation;
+    if (ref == null) {
+      setState(() {
+        _etaPlaceId = p.id;
+        _eta = null;
+        _etaLoading = false;
+      });
+      return;
+    }
+    setState(() {
+      _etaPlaceId = p.id;
+      _eta = null;
+      _etaLoading = true;
+    });
+    final to = LatLng(p.lat, p.lng);
+    final results = await Future.wait([
+      RoutingService.summary(from: ref, to: to, profile: 'foot'),
+      RoutingService.summary(from: ref, to: to, profile: 'driving'),
+    ]);
+    // Ignore if the user changed selection while we were fetching.
+    if (!mounted || _controller.state.selectedPlaceId != p.id) return;
+    final walk = results[0];
+    final drive = results[1];
+    setState(() {
+      _etaLoading = false;
+      _eta = (walk != null && drive != null)
+          ? (walkMin: walk.minutes, driveMin: drive.minutes)
+          : null;
+    });
+  }
+
+  String _fmtMin(int m) {
+    if (m < 60) return '$m min';
+    return '${m ~/ 60}h ${m % 60}m';
   }
 
   // ── Location ──────────────────────────────────────────────────────────────
@@ -534,10 +597,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       width: selected ? 160 : 40,
       height: selected ? 66 : 40,
       child: GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          _controller.select(p.id);
-        },
+        onTap: () => _selectPlace(p.id),
         child: _MapMarker(place: p, selected: selected),
       ),
     );
@@ -1014,7 +1074,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                   onTap: () {
                     Navigator.pop(context);
                     _controller.setFollow(false);
-                    _controller.select(p.id);
+                    _selectPlace(p.id);
                     _animatedMove(LatLng(p.lat, p.lng), 16);
                   },
                   leading: Container(
@@ -1082,18 +1142,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   String _formatDistance(double meters) =>
       meters < 1000 ? '${meters.round()} m' : '${(meters / 1000).toStringAsFixed(1)} km';
 
-  /// Rough walking time estimate from straight-line distance, with a 1.3×
-  /// detour factor at ~5 km/h. Approximate — the Directions button gives the
-  /// real routed time.
-  String _walkEta(double meters) {
-    final minutes = (meters * 1.3 / (5000 / 60)).round();
-    if (minutes < 1) return '~1 min walk';
-    if (minutes < 60) return '~$minutes min walk';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return '~${h}h ${m}m walk';
-  }
-
   void _openDirections(Place p) {
     HapticFeedback.selectionClick();
     Navigator.of(context).push(MaterialPageRoute(
@@ -1106,7 +1154,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     final ref = _controller.state.userLocation;
     final meters = ref == null ? null : haversineMeters(ref, LatLng(place.lat, place.lng));
     final distance = meters == null ? null : _formatDistance(meters);
-    final walkEta = meters == null ? null : _walkEta(meters);
+    final showEta = _etaPlaceId == place.id;
 
     return Positioned(
       left: 0,
@@ -1159,12 +1207,23 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                               Text(distance, style: TextStyle(color: AppColors.grey, fontSize: 12)),
                             ],
                           ]),
-                          if (walkEta != null) ...[
-                            const SizedBox(height: 3),
+                          if (showEta && _etaLoading) ...[
+                            const SizedBox(height: 4),
                             Row(children: [
-                              Icon(Icons.directions_walk_rounded, color: AppColors.grey, size: 12),
+                              const SizedBox(width: 11, height: 11, child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.yellow)),
+                              const SizedBox(width: 6),
+                              Text('Calculating route…', style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                            ]),
+                          ] else if (showEta && _eta != null) ...[
+                            const SizedBox(height: 4),
+                            Row(children: [
+                              Icon(Icons.directions_walk_rounded, color: AppColors.grey, size: 13),
                               const SizedBox(width: 3),
-                              Text(walkEta, style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                              Text(_fmtMin(_eta!.walkMin), style: TextStyle(color: AppColors.greyLight, fontSize: 11, fontWeight: FontWeight.w600)),
+                              const SizedBox(width: 12),
+                              Icon(Icons.directions_car_rounded, color: AppColors.grey, size: 13),
+                              const SizedBox(width: 3),
+                              Text(_fmtMin(_eta!.driveMin), style: TextStyle(color: AppColors.greyLight, fontSize: 11, fontWeight: FontWeight.w600)),
                             ]),
                           ],
                           const SizedBox(height: 3),
@@ -1174,7 +1233,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                       const SizedBox(width: 8),
                       Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                         GestureDetector(
-                          onTap: _controller.clearSelection,
+                          onTap: _clearSelection,
                           child: Container(width: 26, height: 26, decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.close_rounded, color: AppColors.grey, size: 15)),
                         ),
                         GestureDetector(
