@@ -97,7 +97,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
                 stream: _stream,
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: AppColors.yellow));
+                    return ListView(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      children: const [_PostSkeleton(), _PostSkeleton(), _PostSkeleton()],
+                    );
                   }
                   if (snap.hasError) {
                     return Center(child: Padding(
@@ -127,7 +130,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.only(bottom: 24),
                       itemCount: posts.length,
-                      itemBuilder: (_, i) => _PostCard(post: posts[i]),
+                      itemBuilder: (_, i) => _PostCard(key: ValueKey(posts[i].id), post: posts[i]),
                     ),
                   );
                 },
@@ -208,6 +211,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
               TextField(
                 controller: ctrl,
                 maxLines: 5,
+                maxLength: 500,
                 style: TextStyle(color: AppColors.white),
                 decoration: InputDecoration(hintText: 'What\'s happening in Accra?'),
               ),
@@ -278,7 +282,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
 class _PostCard extends StatefulWidget {
   final CommunityPost post;
-  const _PostCard({required this.post});
+  const _PostCard({super.key, required this.post});
   @override
   State<_PostCard> createState() => _PostCardState();
 }
@@ -286,6 +290,7 @@ class _PostCard extends StatefulWidget {
 class _PostCardState extends State<_PostCard> {
   bool _liked = false;
   bool _favorited = false;
+  bool _showHeartBurst = false;
   late int _likeCount;
   late int _commentCount;
 
@@ -388,15 +393,24 @@ class _PostCardState extends State<_PostCard> {
   }
 
   Color get _categoryColor {
-    switch (widget.post.category) {
-      case 'Safety': return const Color(0xFFEF5350);
-      case 'Food': return const Color(0xFF66BB6A);
-      case 'Transport': return const Color(0xFF00BCD4);
-      case 'Scam alert':
-      case 'Scam Alert':
-        return const Color(0xFFFF7043);
+    switch (widget.post.category.toLowerCase()) {
+      case 'safety': return const Color(0xFFEF5350);
+      case 'food': return const Color(0xFF66BB6A);
+      case 'transport': return const Color(0xFF00BCD4);
+      case 'scam alert': return const Color(0xFFFF7043);
+      case 'accommodation': return const Color(0xFF26A69A);
+      case 'events': return const Color(0xFFAB47BC);
+      case 'student life': return const Color(0xFF7C4DFF);
       default: return AppColors.yellow;
     }
+  }
+
+  void _onDoubleTapLike() {
+    if (!_liked) _toggleLike(); // double-tap only ever likes, never unlikes
+    setState(() => _showHeartBurst = true);
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _showHeartBurst = false);
+    });
   }
 
   Future<void> _toggleLike() async {
@@ -449,14 +463,30 @@ class _PostCardState extends State<_PostCard> {
         else if (p.imageUrl != null)
           GestureDetector(
             onTap: () => _openImageViewer(context, p.imageUrl!),
-            child: Stack(alignment: Alignment.bottomRight, children: [
-              AppImage(url: p.imageUrl!, height: 180, width: double.infinity),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 16),
+            onDoubleTap: _onDoubleTapLike,
+            child: Stack(alignment: Alignment.center, children: [
+              Stack(alignment: Alignment.bottomRight, children: [
+                AppImage(url: p.imageUrl!, height: 180, width: double.infinity),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 16),
+                  ),
+                ),
+              ]),
+              // Instagram-style heart pop on double-tap
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _showHeartBurst ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: AnimatedScale(
+                    scale: _showHeartBurst ? 1.0 : 0.4,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutBack,
+                    child: Icon(Icons.favorite_rounded, color: Colors.white.withValues(alpha: 0.92), size: 96),
+                  ),
                 ),
               ),
             ]),
@@ -599,6 +629,42 @@ class _ImageViewer extends StatelessWidget {
   }
 }
 
+/// Placeholder card shown while the feed loads.
+class _PostSkeleton extends StatelessWidget {
+  const _PostSkeleton();
+
+  Widget _bar(double w, double h) => Container(
+        width: w, height: h,
+        decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(6)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.navyCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.cardBorder)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 36, height: 36, decoration: BoxDecoration(color: AppColors.navy, shape: BoxShape.circle)),
+          const SizedBox(width: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _bar(110, 11),
+            const SizedBox(height: 6),
+            _bar(60, 9),
+          ]),
+        ]),
+        const SizedBox(height: 14),
+        _bar(double.infinity, 11),
+        const SizedBox(height: 8),
+        _bar(220, 11),
+        const SizedBox(height: 14),
+        Container(height: 120, decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(10))),
+      ]),
+    );
+  }
+}
+
 /// Inline video player for a post — tap to play/pause, scrubbable progress.
 class _PostVideo extends StatefulWidget {
   final String url;
@@ -685,13 +751,22 @@ class _PostVideoState extends State<_PostVideo> {
 }
 
 /// Bell icon with a live unread badge; opens the Notifications screen.
-class _NotificationBell extends StatelessWidget {
+class _NotificationBell extends StatefulWidget {
   const _NotificationBell();
+
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  // Cache the stream so we don't open a new realtime channel on every rebuild.
+  late final Stream<List<Map<String, dynamic>>> _stream =
+      SupabaseService.instance.watchNotifications();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: SupabaseService.instance.watchNotifications(),
+      stream: _stream,
       builder: (context, snap) {
         final unread = (snap.data ?? []).where((n) => n['read'] != true).length;
         return GestureDetector(
