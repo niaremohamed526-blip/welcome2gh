@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -14,6 +15,30 @@ import '../../shared/widgets/app_image.dart';
 import '../../shared/widgets/user_location_dot.dart';
 import '../directions/directions_screen.dart';
 import 'map_state.dart';
+
+/// Wraps [child] in a frosted-glass panel (blur + translucent tint + border),
+/// matching the app's glassmorphism design system.
+Widget glass({
+  required Widget child,
+  double radius = 14,
+  double sigma = 12,
+  double alpha = 0.55,
+}) {
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(radius),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.navy.withValues(alpha: alpha),
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: child,
+      ),
+    ),
+  );
+}
 
 /// Brand colour for a place category.
 Color categoryColor(String category) {
@@ -94,6 +119,8 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   StreamSubscription<Position>? _locationSub;
   bool _locating = false; // a location request is in flight
   bool _pendingRecenter = false; // user tapped "locate" before we had a fix
+  LatLng? _loadAnchor; // map centre when the current results were loaded
+  Size? _lastMapSize; // last known map widget size (for viewport math)
 
   static const double _minZoom = 3;
   static const double _maxZoom = 19;
@@ -152,6 +179,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       final places = results[0] as List<Place>;
       final alerts = results[1] as List<AlertItem>;
       _controller.setData(places: places, alerts: alerts);
+      _loadAnchor = _mapController.camera.center;
 
       if (places.isEmpty) return;
       if (st.search.trim().isNotEmpty && !_controller.state.followUser) {
@@ -189,6 +217,38 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     _controller.setFollow(false);
     _controller.select(nearest.id);
     _animatedMove(LatLng(nearest.lat, nearest.lng), 16);
+  }
+
+  /// Reload places for the currently visible region (the user panned away and
+  /// tapped "Search this area"). Uses the nearby_places PostGIS function.
+  Future<void> _searchThisArea() async {
+    HapticFeedback.selectionClick();
+    final cam = _mapController.camera;
+    final center = cam.center;
+    final radius = _viewportRadiusMeters(cam.zoom).round().clamp(500, 50000);
+    _controller.startLoading();
+    _controller.setShowSearchArea(false);
+    final filter = _controller.state.filter;
+    try {
+      final results = await Future.wait([
+        SupabaseService.instance.getNearbyPlaces(
+          lat: center.latitude,
+          lng: center.longitude,
+          radiusM: radius,
+          category: filter == 'All' ? null : filter,
+        ),
+        SupabaseService.instance.getActiveAlerts(),
+      ]);
+      if (!mounted) return;
+      _controller.setData(
+        places: results[0] as List<Place>,
+        alerts: results[1] as List<AlertItem>,
+      );
+      _loadAnchor = center;
+    } catch (e) {
+      if (!mounted) return;
+      _controller.setError(e.toString());
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -373,6 +433,22 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         cam.center.longitude != st.center.longitude) {
       _controller.syncCamera(cam.center, cam.zoom);
     }
+
+    // Show "Search this area" once the user has panned far enough from where
+    // the current results were loaded (roughly half a screen-width away).
+    if (_loadAnchor != null && !st.loading) {
+      final movedAway =
+          haversineMeters(_loadAnchor!, cam.center) > _viewportRadiusMeters(cam.zoom) * 0.6;
+      _controller.setShowSearchArea(movedAway);
+    }
+  }
+
+  /// Approximate ground radius (metres) of half the map width at [zoom].
+  double _viewportRadiusMeters(double zoom) {
+    final size = _lastMapSize;
+    final halfWidthPx = (size?.width ?? 360) / 2;
+    return GeoProjection.pixelsToMeters(
+        halfWidthPx, _controller.state.center.latitude, zoom);
   }
 
   // ── Marker building (uses the projection + collision resolver) ─────────────
@@ -567,6 +643,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final size = constraints.biggest;
+          _lastMapSize = size;
           return AnimatedBuilder(
             animation: _controller,
             builder: (context, _) {
@@ -578,6 +655,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                   if (st.selectedPlace != null) _bottomScrim(),
                   _buildTopControls(st),
                   _buildZoomControls(st),
+                  if (st.places.isNotEmpty) _buildListButton(st),
                   if (st.selectedPlace != null) _buildPlaceCard(st.selectedPlace!),
                 ],
               );
@@ -600,7 +678,11 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+          // Theme-aware basemap: dark tiles in dark mode (markers pop), the
+          // softer Voyager style in light mode.
+          urlTemplate: Theme.of(context).brightness == Brightness.dark
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
           subdomains: const ['a', 'b', 'c', 'd'],
           userAgentPackageName: 'com.welcome2gh',
           maxNativeZoom: 19,
@@ -635,8 +717,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Row(children: [
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(color: AppColors.navy.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.cardBorder)),
+                child: glass(
                   child: TextField(
                     controller: _searchCtrl,
                     onChanged: _onSearchChanged,
@@ -689,7 +770,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               const SizedBox(width: 8),
               GestureDetector(
                 onTap: () { HapticFeedback.selectionClick(); _load(); },
-                child: Container(width: 44, height: 44, decoration: BoxDecoration(color: AppColors.navy.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.cardBorder)), child: Icon(Icons.refresh_rounded, color: AppColors.grey, size: 20)),
+                child: glass(child: SizedBox(width: 44, height: 44, child: Icon(Icons.refresh_rounded, color: AppColors.grey, size: 20))),
               ),
             ]),
           ),
@@ -745,6 +826,10 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                   const SizedBox(height: 8),
                   _errorBanner(st),
                 ],
+                if (st.showSearchArea && !st.loading) ...[
+                  const SizedBox(height: 10),
+                  Center(child: _searchAreaPill()),
+                ],
               ],
             ),
           ),
@@ -753,11 +838,30 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _searchAreaPill() {
+    return GestureDetector(
+      onTap: _searchThisArea,
+      child: glass(
+        radius: 22,
+        alpha: 0.7,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.refresh_rounded, color: AppColors.yellow, size: 16),
+            const SizedBox(width: 6),
+            Text('Search this area', style: TextStyle(color: AppColors.yellow, fontSize: 12, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Widget _statusPill(MapViewState st) {
     final alertCount = st.mappableAlerts.length;
-    return Container(
+    return glass(
+      radius: 20,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: AppColors.navy.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.cardBorder)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         if (st.loading)
           const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.yellow))
@@ -774,6 +878,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
           Text('$alertCount alert(s)', style: const TextStyle(color: Color(0xFFEF5350), fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ]),
+      ),
     );
   }
 
@@ -849,6 +954,99 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildListButton(MapViewState st) {
+    return Positioned(
+      left: 16,
+      bottom: st.selectedPlace != null ? 230 : 110,
+      child: GestureDetector(
+        onTap: () => _showNearbyList(st),
+        child: glass(
+          radius: 14,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(Icons.format_list_bulleted_rounded, color: AppColors.yellow, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet listing places sorted by distance from the user (or the map
+  /// centre when location is unknown). Tapping a row flies to that place.
+  void _showNearbyList(MapViewState st) {
+    HapticFeedback.lightImpact();
+    final ref = st.userLocation ?? _mapController.camera.center;
+    final sorted = [...st.places]..sort((a, b) => haversineMeters(ref, LatLng(a.lat, a.lng))
+        .compareTo(haversineMeters(ref, LatLng(b.lat, b.lng))));
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.navyCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollCtrl) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 6),
+            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.grey.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+            child: Row(children: [
+              const Icon(Icons.near_me_rounded, color: AppColors.yellow, size: 18),
+              const SizedBox(width: 10),
+              Text('Nearby places', style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('${sorted.length}', style: TextStyle(color: AppColors.grey, fontSize: 12)),
+            ]),
+          ),
+          Divider(color: AppColors.cardBorder, height: 1),
+          Expanded(
+            child: ListView.builder(
+              controller: scrollCtrl,
+              itemCount: sorted.length,
+              itemBuilder: (_, i) {
+                final p = sorted[i];
+                final color = categoryColor(p.category);
+                final dist = _formatDistance(haversineMeters(ref, LatLng(p.lat, p.lng)));
+                return ListTile(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _controller.setFollow(false);
+                    _controller.select(p.id);
+                    _animatedMove(LatLng(p.lat, p.lng), 16);
+                  },
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                    child: Icon(categoryIcon(p.category), color: color, size: 20),
+                  ),
+                  title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                  subtitle: Text('${p.category} · ${p.address}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.grey, fontSize: 12)),
+                  trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.star_rounded, color: AppColors.yellow, size: 13),
+                      const SizedBox(width: 2),
+                      Text(p.rating.toStringAsFixed(1), style: TextStyle(color: AppColors.white, fontSize: 12)),
+                    ]),
+                    const SizedBox(height: 3),
+                    Text(dist, style: TextStyle(color: AppColors.yellow, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ]),
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
   Widget _topScrim() => Positioned(
         top: 0,
         left: 0,
@@ -888,6 +1086,18 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   String _formatDistance(double meters) =>
       meters < 1000 ? '${meters.round()} m' : '${(meters / 1000).toStringAsFixed(1)} km';
 
+  /// Rough walking time estimate from straight-line distance, with a 1.3×
+  /// detour factor at ~5 km/h. Approximate — the Directions button gives the
+  /// real routed time.
+  String _walkEta(double meters) {
+    final minutes = (meters * 1.3 / (5000 / 60)).round();
+    if (minutes < 1) return '~1 min walk';
+    if (minutes < 60) return '~$minutes min walk';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return '~${h}h ${m}m walk';
+  }
+
   void _openDirections(Place p) {
     HapticFeedback.selectionClick();
     Navigator.of(context).push(MaterialPageRoute(
@@ -898,9 +1108,9 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   Widget _buildPlaceCard(Place place) {
     final color = categoryColor(place.category);
     final ref = _controller.state.userLocation;
-    final distance = ref == null
-        ? null
-        : _formatDistance(haversineMeters(ref, LatLng(place.lat, place.lng)));
+    final meters = ref == null ? null : haversineMeters(ref, LatLng(place.lat, place.lng));
+    final distance = meters == null ? null : _formatDistance(meters);
+    final walkEta = meters == null ? null : _walkEta(meters);
 
     return Positioned(
       left: 0,
@@ -953,6 +1163,14 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                               Text(distance, style: TextStyle(color: AppColors.grey, fontSize: 12)),
                             ],
                           ]),
+                          if (walkEta != null) ...[
+                            const SizedBox(height: 3),
+                            Row(children: [
+                              Icon(Icons.directions_walk_rounded, color: AppColors.grey, size: 12),
+                              const SizedBox(width: 3),
+                              Text(walkEta, style: TextStyle(color: AppColors.grey, fontSize: 11)),
+                            ]),
+                          ],
                           const SizedBox(height: 3),
                           Text(place.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.grey, fontSize: 11)),
                         ]),
@@ -1007,15 +1225,13 @@ class _ZoomButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppColors.navy.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.cardBorder),
+      child: glass(
+        radius: 12,
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: Icon(icon, color: AppColors.white, size: 20),
         ),
-        child: Icon(icon, color: AppColors.white, size: 20),
       ),
     );
   }

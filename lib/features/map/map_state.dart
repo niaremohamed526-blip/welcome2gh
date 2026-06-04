@@ -47,6 +47,10 @@ class MapViewState {
   final String? error;
   final LocationStatus locationStatus;
 
+  /// Whether the "Search this area" pill should be shown (user panned away
+  /// from where the current results were loaded).
+  final bool showSearchArea;
+
   const MapViewState({
     this.userLocation,
     this.userHeading,
@@ -61,6 +65,7 @@ class MapViewState {
     this.loading = true,
     this.error,
     this.locationStatus = LocationStatus.unknown,
+    this.showSearchArea = false,
   });
 
   /// The currently selected place, or null if none / no longer in results.
@@ -99,6 +104,7 @@ class MapViewState {
     bool? loading,
     Object? error = _unset,
     LocationStatus? locationStatus,
+    bool? showSearchArea,
   }) {
     return MapViewState(
       userLocation: identical(userLocation, _unset)
@@ -120,6 +126,7 @@ class MapViewState {
       loading: loading ?? this.loading,
       error: identical(error, _unset) ? this.error : error as String?,
       locationStatus: locationStatus ?? this.locationStatus,
+      showSearchArea: showSearchArea ?? this.showSearchArea,
     );
   }
 }
@@ -158,7 +165,13 @@ class MapStateController extends ChangeNotifier {
       loading: false,
       error: null,
       selectedPlaceId: stillThere ? _state.selectedPlaceId : null,
+      showSearchArea: false,
     ));
+  }
+
+  void setShowSearchArea(bool show) {
+    if (_state.showSearchArea == show) return;
+    _emit(_state.copyWith(showSearchArea: show));
   }
 
   // ── Filters & search ──────────────────────────────────────────────────────
