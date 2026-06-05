@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/time_utils.dart';
@@ -713,12 +714,23 @@ class _PostVideoState extends State<_PostVideo> {
   Widget build(BuildContext context) {
     final c = _ctrl;
     if (_failed) {
+      // Inline playback can fail on web for some formats (e.g. iPhone .mov /
+      // HEVC). Offer to open the video directly in the browser as a fallback.
       return Container(
         height: 180, color: AppColors.navy,
         child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.videocam_off_rounded, color: AppColors.grey, size: 28),
-          const SizedBox(height: 6),
-          Text('Video unavailable', style: TextStyle(color: AppColors.grey, fontSize: 12)),
+          Icon(Icons.smart_display_outlined, color: AppColors.grey, size: 30),
+          const SizedBox(height: 8),
+          Text("Can't preview this video here", style: TextStyle(color: AppColors.grey, fontSize: 12)),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(color: AppColors.yellow, borderRadius: BorderRadius.circular(10)),
+              child: Text('OPEN VIDEO', style: TextStyle(color: AppColors.navy, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+          ),
         ])),
       );
     }

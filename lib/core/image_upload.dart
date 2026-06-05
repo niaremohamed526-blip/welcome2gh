@@ -65,7 +65,7 @@ class ImageUploadHelper {
 
     final XFile? file = await _picker.pickVideo(
       source: source,
-      maxDuration: const Duration(seconds: 60),
+      maxDuration: const Duration(seconds: 30), // shorter = much faster upload
     );
     if (file == null) return null;
 

@@ -112,7 +112,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _postsCount = 0;
       _reviewsCount = 0;
     });
-    await SupabaseService.instance.signOut();
+    // Navigate even if signOut throws (e.g. offline) so the user never gets
+    // stuck on a half-cleared profile screen.
+    try {
+      await SupabaseService.instance.signOut();
+    } catch (_) {/* ignore — local session is cleared regardless */}
     if (!mounted) return;
     context.go('/login');
   }
