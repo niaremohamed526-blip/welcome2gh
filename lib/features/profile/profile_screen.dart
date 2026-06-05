@@ -106,19 +106,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (confirmed != true) return;
-    setState(() {
-      _profile = null;
-      _favoritesCount = 0;
-      _postsCount = 0;
-      _reviewsCount = 0;
-    });
-    // Navigate even if signOut throws (e.g. offline) so the user never gets
-    // stuck on a half-cleared profile screen.
+    if (!mounted) return;
+    // Navigate to login FIRST. Doing this before awaiting signOut avoids any
+    // race where the auth-state redirect disposes this screen mid-await and the
+    // navigation never runs. /login is a public route so this is allowed while
+    // still signed in; the session is then cleared right after.
+    context.go('/login');
     try {
       await SupabaseService.instance.signOut();
-    } catch (_) {/* ignore — local session is cleared regardless */}
-    if (!mounted) return;
-    context.go('/login');
+    } catch (_) {/* local session is cleared regardless */}
   }
 
   @override
