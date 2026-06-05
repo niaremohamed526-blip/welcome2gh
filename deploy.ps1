@@ -57,8 +57,10 @@ else {
 }
 
 # 2. Build -------------------------------------------------------------------
-Step "Building web release (flutter build web --release)"
-flutter build web --release
+Step "Building web release (flutter build web --release --pwa-strategy=none)"
+# --pwa-strategy=none disables the offline service worker so users always get
+# the latest deploy instead of a stale cached build.
+flutter build web --release --pwa-strategy=none
 if ($LASTEXITCODE -ne 0) { Fail "Web build failed." }
 if (-not (Test-Path "build\web\index.html")) { Fail "build\web\index.html missing - build did not produce output." }
 
