@@ -1,131 +1,101 @@
-# Welcome2GH — Complete Project Summary
+# Welcome2GH — Project Summary (Current Version)
 
-A full record of everything built, from first line to now.
-
----
-
-## What the app is
-
-**Welcome2GH** — a smart tourism & student-assistance mobile app for international visitors in Accra, Ghana. Dark-navy + yellow design, built in Flutter with a Supabase backend.
+Smart tourism & student-assistance app for **Accra, Ghana** — Flutter + Supabase.
+Developer: Mohamed (Wisconsin International University College).
+Live (web): **https://welcome2gh.vercel.app** · Repo: github.com/niaremohamed526-blip/welcome2gh
 
 ---
 
-## Phase 1 — Foundation (UI Prototype)
+## Tech Stack
+- **Flutter (Dart)** — Android, iOS, Web
+- **Supabase** — Auth, PostgreSQL + PostGIS, Storage, Realtime, RLS, Edge Functions
+- **flutter_map + OpenStreetMap** (Carto Voyager tiles) — no key
+- **Routing:** FOSSGIS OSRM (routed-car / routed-bike / routed-foot) — real per-mode times, no key
+- **Geocoding:** OpenStreetMap Nominatim — address/place search, no key
+- **go_router** (navigation + auth guard) · **video_player** · **geolocator** · **cached_network_image + shimmer** · **google_fonts** (Barlow + Inter) · **share_plus / url_launcher**
 
-Created the Flutter project from scratch with clean architecture:
-
-```
-lib/
-  core/         → router, models, services, config
-  features/     → splash, onboarding, auth, home, map,
-                  place_details, community, favorites, profile, ai_assistant
-  shared/       → theme, reusable widgets
-```
-
-Design system (`app_theme.dart`): navy `#0D1B2A` + yellow `#FFCC00`, Barlow (headings) + Inter (body), glassmorphism, rounded cards.
-
-14 screens built with sample data: splash, 6-slide onboarding, login/signup, home (hero + categories + place list), full-screen map with markers, place details (IoT score cards), community feed, favorites grid, profile, AI assistant chat, emergency contacts.
+## Design System
+- Dark navy `#0D1B2A` + Yellow accent `#FFCC00`; light theme `#F0F4F8` / white cards
+- Glassmorphism, 16px radius, Barlow headings; Ghana flag palette, Adinkra motifs
+- `AppColors` uses theme-aware getters (white→navy, navyCard→white, etc.); yellow/red/green are const accents
 
 ---
 
-## Phase 2 — Getting it running
-
-- Installed Flutter dependencies, fixed `pubspec.yaml`
-- Android setup: installed cmdline-tools, accepted licenses, downloaded SDK platform 35 + system image, installed AEHD hypervisor driver, created the W2G_Pixel emulator
-- Fixed corrupted NDK, Gradle network/heap issues (bumped JVM to 4 GB)
-- App running on Android emulator ✅
-- Also enabled Chrome web as a faster preview target
+## Core Features
+Splash · Onboarding (6 slides) · Auth (email/password + Google + forgot password) ·
+Home · Map · Community · Favorites · Profile · AI Assistant · Add/Edit Place ·
+Fair Price · Admin Dashboard · Settings · Directions · Legal/About/Support
 
 ---
 
-## Phase 3 — Real backend (Supabase)
+## What's been built / fixed recently (this version)
 
-Complete SQL schema (`schema.sql`): `profiles`, `places`, `reviews`, `favorites`, `posts`, `post_likes`, `post_comments`, `fair_prices`, `alerts`, `iot_data`, `notifications` — with PostGIS geo-search, RLS policies, auto-triggers (ratings recalc, like/comment counters, auto-profile-on-signup), `nearby_places`/`nearby_alerts` RPC functions, realtime enabled, and seed data (6 Accra places + fair prices + alerts).
+### Deployment & infrastructure
+- **Vercel web deploy fixed** — `vercel.json` sets `outputDirectory: public`; auto-deploys on every GitHub push.
+- **`deploy.ps1`** — one-command deploy: analyze + test + build + sync `public/` + push. Usage: `.\deploy.ps1 "message"`.
+- **Cache problem solved permanently** — service worker disabled (`flutter build web --pwa-strategy=none`) + `Cache-Control: no-store` headers on index.html / main.dart.js, so deploys always load fresh. One-time Safari cache clear needed to escape a previously-stuck service worker.
 
-Wired every screen to live data:
-- Real Supabase Auth (email/password) with isolated users
-- Home: live places + debounced search + category filter
-- Place details: real reviews, working save, write-review, directions
-- Map: live places + alert zones + GPS location
-- Community: realtime feed + create posts + likes
-- Favorites, Profile (real sign-out), tap-to-call emergency contacts
+### Map (major overhaul)
+- New architecture: `core/geo/geo_math.dart` (Web-Mercator coordinate utility), `core/geo/marker_layout.dart` (priority bounding-box collision/declutter), `features/map/map_state.dart` (immutable state + controller, single source of truth). **34 unit tests**.
+- Fixed 14 map bugs (animation crash, danger-zone radius, expired alerts, category filters, alert count, stale card, locate button, permission feedback, stream leaks, banner overlap, zoom clamp, search-vs-follow, nav, marker colors).
+- **Locate button** works on web. **Tap a category → flies to the nearest** place to your live location.
+- **Icon markers** (category-colored) + **rich place card** (rating, distance, **real routed walk/drive ETA**, Directions button).
+- **"Search this area"** pill (nearby_places PostGIS) · **Nearby list sheet** (sorted by distance).
+- Glassmorphism overlays, legibility scrims, chip icons. (Light Voyager basemap — dark tiles tried then reverted by preference.)
 
----
+### Directions
+- Real **per-mode times**: Drive / Bike / Walk now differ (FOSSGIS OSRM engines). Replaced the car-only demo server.
 
-## Phase 4 — Admin system & roles
+### Community (v2)
+- **Tap image → fullscreen** (pinch-zoom) · **double-tap to like**
+- **Video posts** — pick/upload + inline player (+ "Open video" fallback for iPhone .mov/HEVC)
+- **Favorite/bookmark posts**
+- **Notifications** — bell + unread badge + Notifications screen; DB triggers notify the author on like/comment
+- **3-dot menu** — delete own post / report others · **pull-to-refresh** · loading skeletons
+- Fixes: list keys (state leak), cached notification stream
 
-- Role selector at signup (Tourist / Student / Local / Admin with secret code `W2G-ADMIN-2026`)
-- Admin Dashboard — 7 tabs: Overview stats, Users (change roles), Places (verify/delete), Reviews (moderate), Posts (hide), Alerts (create/broadcast), Fair Prices (verify/flag/delete)
-- Admin RLS policies (`admin_policies.sql`) + `is_admin()` function + route guard
+### Home (redesign)
+- Removed the overlapping floating `+`; added a **Quick Actions row** (Add Place / Fair Price / AI Guide / Safety)
+- Replaced fake "THREE WORLDS" cards with a **real "Top-rated in Accra"** carousel from the DB
+- Place-list cards: **full-bleed thumbnails** (no gaps)
 
----
+### Add Place — location picker (fixes wrong coordinates)
+- **No more typing lat/lng.** Search a place/address (geocoding), **tap the map**, or use **GPS**. Pin shown for confirmation → matches Google.
 
-## Phase 5 — Auth hardening
+### Admin — can now EDIT everything (not just delete)
+- **Places:** full editor + map picker (✏️) — fix name, category, **location**, photo, price
+- **Posts:** edit text · **Alerts:** edit · **Fair Prices:** edit amount
 
-- Fixed the "all users are Mohamed" bug
-- Defensive profile upsert on signup, self-healing `signIn` + `getMyProfile`
-- Reactive auth-state listener, clean sign-out
-- Forgot Password + human-readable error messages
-- Diagnosed login issue via direct API call (email-confirmation rate limit)
-
----
-
-## Phase 6 — Feature batches
-
-| Batch | Delivered |
-|-------|-----------|
-| A — Bug fixes | Real map search, real profile stats, persistent settings, change-password, place contact info, tappable alerts, bottom-nav sync, pagination, zoom controls, haptics |
-| B — Image uploads | Cross-platform photo upload (profile, places, reviews, posts) via `ImageUploadHelper` → Supabase Storage |
-| C — AI Guide | Real Claude API integration via secure Supabase Edge Function (`ai-guide`) — context-aware Ghanaian guide (pipeline ready, needs Anthropic key) |
-| E — Performance | `AppImage` (cached + shimmer), skeleton loaders, map marker clustering, pagination |
-
----
-
-## Phase 7 — Branding & polish
-
-- Logo wired everywhere (splash, onboarding, login, home, about) via `AppLogoChip`
-- App launcher icon generated (Android + iOS)
-- Ghana-cultural redesign — splash + onboarding with Adinkra star motifs, Black-Star halo, Ghana flag palette, "Akwaaba" greeting
-- In-app directions (replaced Google Maps redirect) with OSRM routing + 3 transport modes + fare estimate
-- In-app Privacy, Terms, About, Help & Support, Settings screens
+### Other fixes
+- **Sign out → Login** (router auth guard + navigate-first + timeout)
+- **Saved screen** no longer crashes when a favourited place was deleted
+- Admin delete now hides soft-deleted places/posts/alerts everywhere (admin lists + realtime feeds)
+- **Light theme** Profile menu text fixed (was white-on-white)
+- Corrected real place coordinates; found a longitude **sign error** on user-added places (Atlantic Mall, Academic City) — fixable now via the place editor
 
 ---
 
-## Phase 8 — Real problem-solving
+## ⚠️ SQL to run in Supabase (SQL Editor → Run)
+1. **`supabase/community_upgrade.sql`** → video, favorites, notifications, reports
+2. **`supabase/admin_edit_policies.sql`** → lets admin edit posts / alerts / fair-prices
+3. **`supabase/fix_place_coords.sql`** (+ Atlantic Mall / Academic City) → correct coordinates *(or just use the place editor)*
 
-| Issue | Fix |
-|-------|-----|
-| App "very slow" | Found 27 exceptions/frame from Skeleton shimmer crashing on `double.infinity` → fixed |
-| Emulator showing old version | Rebuilt + reinstalled current APK; diagnosed emulator GPU-driver crashes → recommend Chrome/physical phone |
-| Like/comment 1s lag | Optimistic updates — instant heart pop + count |
-| Map location jump | Smooth 900 ms glide animation |
-| Kente bands masking elements | Removed from splash + onboarding |
-| Hero image | Ghana-themed + cached |
-| Admin hero management | New `app_settings` table + admin hero editor (title/subtitle/image) |
-| Post pictures not loading | Root cause: storage buckets → created 4 public buckets + policies (verified live) |
-| 18 px / 81 px overflows | `FittedBox` on onboarding + taller favorites grid cells |
+All idempotent (safe to run more than once).
 
----
+## Database (Supabase)
+Tables: profiles, places, reviews, favorites, posts, post_likes, post_comments,
+**post_favorites, post_reports**, fair_prices, alerts, iot_data, notifications, app_settings.
+PostGIS geo-search, RLS, nearby_places/nearby_alerts RPC, realtime, triggers
+(ratings, like/comment counts, geom from lat/lng, **like/comment → notification**).
+Storage buckets (public): profiles, places, reviews, posts.
 
-## Tech stack (final)
+## Roles
+Tourist / Student / Local = full app · **Admin** = + Admin Dashboard (signup code `W2G-ADMIN-2026`).
 
-Flutter · Supabase (Auth + PostgreSQL/PostGIS + Storage + Realtime + Edge Functions) · flutter_map + OSM/Carto + clustering · Claude API (Opus) · cached_network_image · geolocator · image_picker · share_plus · go_router
+## Outstanding
+🔴 Run the 3 SQL files above · Google OAuth (Supabase dashboard) · AI Guide edge function + ANTHROPIC_API_KEY
+🟡 Move admin secret off the client · iPhone .mov transcoding (guaranteed inline playback) · Saved Posts browse screen
+🟢 Android APK (`flutter build apk --release`)
 
----
-
-## Still needs your action
-
-- **AI Guide** — deploy edge function + set Anthropic API key: `supabase functions deploy ai-guide`
-- **Real Android testing** — emulator has a host GPU-driver instability; a physical phone via USB is the most reliable path
-
----
-
-## Key files
-
-| File | Purpose |
-|------|---------|
-| `supabase/schema.sql` | Full database schema + RLS + triggers + seed data |
-| `supabase/admin_policies.sql` | Admin-role RLS policies |
-| `supabase/functions/ai-guide/index.ts` | Claude API edge function |
-| `lib/core/supabase_service.dart` | Single backend layer |
-| `lib/shared/widgets/` | `app_image`, `app_logo`, shared UI |
+## Deploy workflow
+`.\deploy.ps1 "what changed"` → builds + tests + pushes → Vercel auto-publishes in ~30–60s.
