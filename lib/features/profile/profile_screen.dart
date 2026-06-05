@@ -112,8 +112,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // navigation never runs. /login is a public route so this is allowed while
     // still signed in; the session is then cleared right after.
     context.go('/login');
+    // Clear the session, but don't let a hung network call block anything —
+    // we've already navigated away.
     try {
-      await SupabaseService.instance.signOut();
+      await SupabaseService.instance.signOut().timeout(const Duration(seconds: 4));
     } catch (_) {/* local session is cleared regardless */}
   }
 
