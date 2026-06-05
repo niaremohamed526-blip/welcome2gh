@@ -728,6 +728,11 @@ class _PostsTabState extends State<_PostsTab> {
                 const Spacer(),
                 Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.yellow.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)), child: Text(p.category.toUpperCase(), style: const TextStyle(color: AppColors.yellow, fontSize: 9, fontWeight: FontWeight.w800))),
                 IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.yellow, size: 18),
+                  tooltip: 'Edit post',
+                  onPressed: () => _editPost(p),
+                ),
+                IconButton(
                   icon: const Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 18),
                   onPressed: () async {
                     final ok = await _confirm(context, 'Hide this post?');
@@ -741,6 +746,29 @@ class _PostsTabState extends State<_PostsTab> {
         },
       ),
     );
+  }
+
+  void _editPost(CommunityPost p) {
+    final ctrl = TextEditingController(text: p.content);
+    showDialog(context: context, builder: (_) => AlertDialog(
+      backgroundColor: AppColors.navyCard,
+      title: Text('Edit post', style: TextStyle(color: AppColors.white)),
+      content: TextField(controller: ctrl, maxLines: 5, style: TextStyle(color: AppColors.white), decoration: InputDecoration(hintText: 'Post content')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: AppColors.grey))),
+        ElevatedButton(onPressed: () async {
+          final text = ctrl.text.trim();
+          if (text.isEmpty) return;
+          final nav = Navigator.of(context);
+          final messenger = ScaffoldMessenger.of(context);
+          try {
+            await SupabaseService.instance.updatePost(p.id, content: text, category: p.category);
+            nav.pop();
+            _load();
+          } catch (e) { messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red)); }
+        }, child: const Text('SAVE')),
+      ],
+    ));
   }
 }
 
@@ -773,7 +801,7 @@ class _AlertsTabState extends State<_AlertsTab> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.red,
         foregroundColor: AppColors.white,
-        onPressed: () => _newAlert(),
+        onPressed: () => _alertSheet(),
         child: const Icon(Icons.add_alert_rounded),
       ),
       body: _loading
@@ -807,6 +835,11 @@ class _AlertsTabState extends State<_AlertsTab> {
                             Text(a.description, style: TextStyle(color: AppColors.grey, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
                           ])),
                           IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: AppColors.yellow, size: 18),
+                            tooltip: 'Edit alert',
+                            onPressed: () => _alertSheet(existing: a),
+                          ),
+                          IconButton(
                             icon: const Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 18),
                             onPressed: () async {
                               final ok = await _confirm(context, 'Deactivate this alert?');
@@ -821,13 +854,13 @@ class _AlertsTabState extends State<_AlertsTab> {
     );
   }
 
-  void _newAlert() {
-    final title = TextEditingController();
-    final desc = TextEditingController();
-    final lat = TextEditingController();
-    final lng = TextEditingController();
-    String type = 'unsafe_area';
-    String severity = 'medium';
+  void _alertSheet({AlertItem? existing}) {
+    final title = TextEditingController(text: existing?.title ?? '');
+    final desc = TextEditingController(text: existing?.description ?? '');
+    final lat = TextEditingController(text: existing?.lat?.toString() ?? '');
+    final lng = TextEditingController(text: existing?.lng?.toString() ?? '');
+    String type = existing?.type ?? 'unsafe_area';
+    String severity = existing?.severity ?? 'medium';
 
     showModalBottomSheet(
       context: context,
@@ -838,9 +871,9 @@ class _AlertsTabState extends State<_AlertsTab> {
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 24),
         child: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text('NEW ALERT', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.red)),
+            Text(existing == null ? 'NEW ALERT' : 'EDIT ALERT', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.red)),
             const SizedBox(height: 8),
-            Text('Broadcast a safety warning', style: Theme.of(context).textTheme.headlineMedium),
+            Text(existing == null ? 'Broadcast a safety warning' : 'Edit this alert', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 18),
             Row(children: ['unsafe_area', 'scam', 'traffic', 'high_crowd', 'emergency'].map((t) => Expanded(child: GestureDetector(onTap: () => setSh(() => type = t), child: Container(margin: EdgeInsets.only(right: 4), padding: EdgeInsets.symmetric(vertical: 8), decoration: BoxDecoration(color: type == t ? AppColors.red : AppColors.navy, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.cardBorder)), child: Center(child: Text(t.replaceAll('_', ' '), style: TextStyle(color: type == t ? AppColors.white : AppColors.grey, fontSize: 9, fontWeight: FontWeight.w700))))))).toList()),
             const SizedBox(height: 10),
@@ -863,16 +896,24 @@ class _AlertsTabState extends State<_AlertsTab> {
                 final nav = Navigator.of(ctx);
                 final messenger = ScaffoldMessenger.of(context);
                 try {
-                  await SupabaseService.instance.createAlert(
-                    type: type, severity: severity, title: title.text.trim(), description: desc.text.trim(),
-                    lat: double.tryParse(lat.text.trim()), lng: double.tryParse(lng.text.trim()),
-                  );
+                  if (existing == null) {
+                    await SupabaseService.instance.createAlert(
+                      type: type, severity: severity, title: title.text.trim(), description: desc.text.trim(),
+                      lat: double.tryParse(lat.text.trim()), lng: double.tryParse(lng.text.trim()),
+                    );
+                  } else {
+                    await SupabaseService.instance.updateAlert(
+                      existing.id,
+                      type: type, severity: severity, title: title.text.trim(), description: desc.text.trim(),
+                      lat: double.tryParse(lat.text.trim()), lng: double.tryParse(lng.text.trim()),
+                    );
+                  }
                   if (mounted) { nav.pop(); _load(); }
                 } catch (e) {
                   if (mounted) messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red));
                 }
               },
-              child: const Text('BROADCAST ALERT'),
+              child: Text(existing == null ? 'BROADCAST ALERT' : 'SAVE CHANGES'),
             )),
             const SizedBox(height: 24),
           ]),
@@ -922,6 +963,7 @@ class _PricesTabState extends State<_PricesTab> {
                 Text(p.itemName ?? '${p.routeFrom ?? ''} → ${p.routeTo ?? ''}', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                 Text('${p.serviceType.toUpperCase()} · GHS ${p.amountGhs.toStringAsFixed(0)}', style: TextStyle(color: AppColors.grey, fontSize: 11)),
               ])),
+              IconButton(icon: const Icon(Icons.edit_outlined, color: AppColors.yellow, size: 18), tooltip: 'Edit price', onPressed: () => _editPrice(p)),
               IconButton(icon: Icon(p.verified ? Icons.verified_rounded : Icons.verified_outlined, color: p.verified ? AppColors.green : AppColors.grey, size: 18), onPressed: () async { await SupabaseService.instance.verifyFairPrice(p.id, !p.verified); _load(); }),
               IconButton(icon: const Icon(Icons.flag_outlined, color: Color(0xFFFF7043), size: 18), onPressed: () async { await SupabaseService.instance.flagFairPrice(p.id); _load(); }),
               IconButton(icon: const Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 18), onPressed: () async {
@@ -933,6 +975,29 @@ class _PricesTabState extends State<_PricesTab> {
         },
       ),
     );
+  }
+
+  void _editPrice(FairPrice p) {
+    final ctrl = TextEditingController(text: p.amountGhs.toStringAsFixed(0));
+    showDialog(context: context, builder: (_) => AlertDialog(
+      backgroundColor: AppColors.navyCard,
+      title: Text('Edit price (GHS)', style: TextStyle(color: AppColors.white)),
+      content: TextField(controller: ctrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), style: TextStyle(color: AppColors.white), decoration: InputDecoration(hintText: 'Amount in GHS')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: AppColors.grey))),
+        ElevatedButton(onPressed: () async {
+          final amount = double.tryParse(ctrl.text.trim());
+          if (amount == null) return;
+          final nav = Navigator.of(context);
+          final messenger = ScaffoldMessenger.of(context);
+          try {
+            await SupabaseService.instance.updateFairPriceAmount(p.id, amount);
+            nav.pop();
+            _load();
+          } catch (e) { messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red)); }
+        }, child: const Text('SAVE')),
+      ],
+    ));
   }
 }
 

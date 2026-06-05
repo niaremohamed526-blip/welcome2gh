@@ -746,6 +746,14 @@ class SupabaseService {
     await _client.from('posts').update({'active': false}).eq('id', id);
   }
 
+  /// Admin edit of a post's text/category (needs admin update policy).
+  Future<void> updatePost(String id, {required String content, required String category}) async {
+    await _client.from('posts').update({
+      'content': content,
+      'category': category.toLowerCase().replaceAll(' ', '_'),
+    }).eq('id', id);
+  }
+
   Future<List<FairPrice>> getAllFairPricesForAdmin() async {
     final rows = await _client.from('fair_prices').select().order('created_at', ascending: false).limit(200);
     return (rows as List).map((r) => FairPrice.fromJson(r)).toList();
@@ -761,6 +769,10 @@ class SupabaseService {
 
   Future<void> deleteFairPrice(String id) async {
     await _client.from('fair_prices').delete().eq('id', id);
+  }
+
+  Future<void> updateFairPriceAmount(String id, double amount) async {
+    await _client.from('fair_prices').update({'amount_ghs': amount}).eq('id', id);
   }
 
   Future<List<AlertItem>> getAllAlertsForAdmin() async {
@@ -798,6 +810,25 @@ class SupabaseService {
 
   Future<void> deactivateAlert(String id) async {
     await _client.from('alerts').update({'active': false}).eq('id', id);
+  }
+
+  Future<void> updateAlert(
+    String id, {
+    required String type,
+    required String severity,
+    required String title,
+    required String description,
+    double? lat,
+    double? lng,
+  }) async {
+    await _client.from('alerts').update({
+      'alert_type': type,
+      'severity': severity,
+      'title': title,
+      'description': description,
+      'lat': lat,
+      'lng': lng,
+    }).eq('id', id);
   }
 
   // ─── STORAGE ───────────────────────────────────────────────────────────
