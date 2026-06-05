@@ -4,12 +4,15 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../core/models.dart';
 import '../../core/supabase_service.dart';
 import '../../core/geocoding_service.dart';
 import '../../core/image_upload.dart';
 
 class AddPlaceScreen extends StatefulWidget {
-  const AddPlaceScreen({super.key});
+  /// When non-null the screen edits this existing place instead of adding one.
+  final Place? editPlace;
+  const AddPlaceScreen({super.key, this.editPlace});
 
   @override
   State<AddPlaceScreen> createState() => _AddPlaceScreenState();
@@ -35,6 +38,27 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   static const _accra = LatLng(5.6037, -0.1870);
 
   final _categories = ['Restaurant', 'Hostel', 'Hotel', 'University', 'Cafe', 'Mall', 'Transport', 'Tourist', 'Hospital', 'Other'];
+
+  bool get _isEdit => widget.editPlace != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.editPlace;
+    if (p != null) {
+      _name.text = p.name;
+      _description.text = p.description;
+      _address.text = p.address;
+      _locSearch.text = p.name;
+      _location = LatLng(p.lat, p.lng);
+      _photoUrl = (p.imageUrl.isEmpty) ? null : p.imageUrl;
+      _priceLevel = p.priceLevel;
+      _category = _categories.firstWhere(
+        (c) => c.toLowerCase() == p.category.toLowerCase(),
+        orElse: () => 'Other',
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -106,18 +130,32 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     }
     setState(() => _saving = true);
     try {
-      await SupabaseService.instance.addPlace(
-        name: _name.text.trim(),
-        category: _category,
-        description: _description.text.trim(),
-        address: _address.text.trim(),
-        lat: _location!.latitude,
-        lng: _location!.longitude,
-        priceLevel: _priceLevel,
-        imageUrl: _photoUrl,
-      );
+      if (_isEdit) {
+        await SupabaseService.instance.updatePlace(
+          widget.editPlace!.id,
+          name: _name.text.trim(),
+          category: _category,
+          description: _description.text.trim(),
+          address: _address.text.trim(),
+          lat: _location!.latitude,
+          lng: _location!.longitude,
+          priceLevel: _priceLevel,
+          imageUrl: _photoUrl,
+        );
+      } else {
+        await SupabaseService.instance.addPlace(
+          name: _name.text.trim(),
+          category: _category,
+          description: _description.text.trim(),
+          address: _address.text.trim(),
+          lat: _location!.latitude,
+          lng: _location!.longitude,
+          priceLevel: _priceLevel,
+          imageUrl: _photoUrl,
+        );
+      }
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text('Place added! Awaiting verification.'), backgroundColor: AppColors.green));
+      messenger.showSnackBar(SnackBar(content: Text(_isEdit ? 'Place updated' : 'Place added! Awaiting verification.'), backgroundColor: AppColors.green));
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -130,7 +168,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.navy,
-      appBar: AppBar(title: const Text('ADD A PLACE'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))),
+      appBar: AppBar(title: Text(_isEdit ? 'EDIT PLACE' : 'ADD A PLACE'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -313,7 +351,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
             onPressed: _saving ? null : _save,
             child: _saving
                 ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navy))
-                : const Text('SUBMIT PLACE'),
+                : Text(_isEdit ? 'SAVE CHANGES' : 'SUBMIT PLACE'),
           )),
           const SizedBox(height: 40),
         ]),

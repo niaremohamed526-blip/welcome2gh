@@ -693,6 +693,30 @@ class SupabaseService {
     await _client.from('places').update({'active': false}).eq('id', placeId);
   }
 
+  /// Admin/owner edit of a place (RLS: places_update_owner_or_admin).
+  Future<void> updatePlace(
+    String id, {
+    required String name,
+    required String category,
+    required String description,
+    required String address,
+    required double lat,
+    required double lng,
+    String priceLevel = '\$\$',
+    String? imageUrl,
+  }) async {
+    await _client.from('places').update({
+      'name': name,
+      'category': category.toLowerCase(),
+      'description': description,
+      'address': address,
+      'lat': lat,
+      'lng': lng,
+      'price_level': priceLevel,
+      'image_url': imageUrl,
+    }).eq('id', id);
+  }
+
   Future<List<Review>> getAllReviews() async {
     final rows = await _client
         .from('reviews')

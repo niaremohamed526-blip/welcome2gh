@@ -5,6 +5,7 @@ import '../../core/models.dart';
 import '../../core/supabase_service.dart';
 import '../../core/image_upload.dart';
 import '../../shared/widgets/app_image.dart';
+import '../add_place/add_place_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -602,6 +603,14 @@ class _PlacesTabState extends State<_PlacesTab> {
               IconButton(
                 icon: Icon(p.verified ? Icons.verified_rounded : Icons.verified_outlined, color: p.verified ? AppColors.green : AppColors.grey, size: 18),
                 onPressed: () async { await SupabaseService.instance.verifyPlace(p.id, !p.verified); _load(); },
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, color: AppColors.yellow, size: 18),
+                tooltip: 'Edit place',
+                onPressed: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddPlaceScreen(editPlace: p)));
+                  _load();
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline_rounded, color: AppColors.red, size: 18),
