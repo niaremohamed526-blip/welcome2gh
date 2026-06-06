@@ -36,6 +36,13 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
+  <!-- MapLibre GL (vector 3D maps). The `maplibre` Flutter package renders
+       through maplibre-gl-js on web and does NOT auto-inject these, so the map
+       would be blank without them. -->
+  <script src='https://unpkg.com/maplibre-gl@^5.0/dist/maplibre-gl.js'></script>
+  <link href='https://unpkg.com/maplibre-gl@^5.0/dist/maplibre-gl.css' rel='stylesheet' />
+  <script src='https://unpkg.com/pmtiles@^4.0/dist/pmtiles.js'></script>
+
   <title>Welcome2GH — Explore Accra</title>
   <link rel="manifest" href="manifest.json">
 </head>
