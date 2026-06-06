@@ -317,7 +317,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
                   const SizedBox(height: 28),
                   Text('DIRECTIONS', style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(height: 8),
-                  Text('See the route, distance, ETA and estimated fare — all inside the app.', style: Theme.of(context).textTheme.bodyMedium),
+                  Text('See the route, distance, ETA and estimated fare, all inside the app.', style: Theme.of(context).textTheme.bodyMedium),
                   const SizedBox(height: 14),
                   SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: _openDirections, icon: const Icon(Icons.navigation_rounded, size: 16), label: const Text('GET DIRECTIONS'))),
                   const SizedBox(height: 24),
@@ -334,7 +334,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
                       child: Column(children: [
                         Icon(Icons.chat_bubble_outline_rounded, color: AppColors.grey, size: 32),
                         SizedBox(height: 8),
-                        Text('No reviews yet — be the first!', style: TextStyle(color: AppColors.grey, fontSize: 13)),
+                        Text('No reviews yet. Be the first!', style: TextStyle(color: AppColors.grey, fontSize: 13)),
                       ]),
                     )
                   else

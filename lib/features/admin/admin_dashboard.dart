@@ -285,7 +285,7 @@ class _HeroEditorSheetState extends State<_HeroEditorSheet> {
       );
       nav.pop();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Hero section updated — pull-to-refresh the home screen to see it.'), backgroundColor: AppColors.green),
+        const SnackBar(content: Text('Hero section updated. Pull to refresh the home screen to see it.'), backgroundColor: AppColors.green),
       );
     } catch (e) {
       if (!mounted) return;

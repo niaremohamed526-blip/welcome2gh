@@ -4,7 +4,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../core/supabase_service.dart';
 
 const _kGreeting =
-    'Akwaaba! 👋 I\'m your local Ghanaian guide. Ask me anything about Accra — safe spots, cheap food, transport prices, places to avoid, student tips and more!';
+    'Akwaaba! 👋 I\'m your local Ghanaian guide. Ask me anything about Accra: safe spots, cheap food, transport prices, places to avoid, student tips and more!';
 
 class _Message {
   final String text;

@@ -264,7 +264,7 @@ class _DirectionsScreenState extends State<DirectionsScreen>
       }
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever) {
-        debugPrint('[NAV] location permission denied: $perm — not routing.');
+        debugPrint('[NAV] location permission denied: $perm. Not routing.');
         return; // no fake origin; _start surfaces a "turn on location" prompt
       }
 
@@ -440,11 +440,11 @@ class _DirectionsScreenState extends State<DirectionsScreen>
           'engineETA=${_durationMin}min  calibratedETA=${calMin}min  profile=$_profile');
       if (straightKm > 3) {
         debugPrint('[NAV] WARNING: origin and destination are '
-            '${straightKm.toStringAsFixed(1)}km apart as the crow flies — if that '
+            '${straightKm.toStringAsFixed(1)}km apart as the crow flies. If that '
             'seems wrong, the destination coordinates are likely off.');
       }
       if (detour > 2.5) {
-        debugPrint('[NAV] WARNING: detour ratio ${detour.toStringAsFixed(1)}x — '
+        debugPrint('[NAV] WARNING: detour ratio ${detour.toStringAsFixed(1)}x, '
             'possible bad route/data for profile=$_profile.');
       }
 
@@ -881,7 +881,7 @@ class _DirectionsScreenState extends State<DirectionsScreen>
   }
 
   String get _eta {
-    if (_durationMin == null) return '—';
+    if (_durationMin == null) return 'N/A';
     final mins = (_remainingSec / 60).round();
     if (mins < 1) return '<1 min';
     if (mins < 60) return '$mins min';
@@ -896,13 +896,13 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   String get _dist {
     final km = _navigating ? _remainingM / 1000.0 : (_distanceKm ?? 0);
-    if (_distanceKm == null) return '—';
+    if (_distanceKm == null) return 'N/A';
     if (km < 1) return '${(km * 1000).round()} m';
     return '${km.toStringAsFixed(1)} km';
   }
 
   String _estimateCost() {
-    if (_distanceKm == null) return '—';
+    if (_distanceKm == null) return 'N/A';
     final cost = _profile == 'driving' ? math.max(20.0, _distanceKm! * 8) : 0.0;
     return cost == 0 ? 'Free' : 'GHS ${cost.round()}';
   }

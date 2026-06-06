@@ -374,7 +374,7 @@ class _PostCardState extends State<_PostCard> {
     if (ok != true) return;
     try {
       await SupabaseService.instance.reportPost(widget.post.id);
-      messenger.showSnackBar(const SnackBar(content: Text('Thanks — post reported'), backgroundColor: AppColors.green));
+      messenger.showSnackBar(const SnackBar(content: Text('Thanks, post reported'), backgroundColor: AppColors.green));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppColors.red));
     }

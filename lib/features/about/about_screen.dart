@@ -26,7 +26,7 @@ class AboutScreen extends StatelessWidget {
           Text(
             'Welcome2Gh is the smart companion for international students and tourists visiting Ghana. '
             'We help you discover safe places, navigate Accra confidently, find fair prices, and connect with '
-            'a vibrant local community — all backed by real-time IoT environmental intelligence.',
+            'a vibrant local community, all backed by real time IoT environmental intelligence.',
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.7),
           ),
           const SizedBox(height: 28),

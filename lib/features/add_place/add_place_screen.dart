@@ -130,7 +130,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       return;
     }
     if (_location == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('Set the location — search, tap the map, or use your GPS'), backgroundColor: AppColors.red));
+      messenger.showSnackBar(const SnackBar(content: Text('Set the location: search, tap the map, or use your GPS'), backgroundColor: AppColors.red));
       return;
     }
     setState(() => _saving = true);
@@ -254,7 +254,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
           // ── LOCATION PICKER ──────────────────────────────────────────────
           Text('LOCATION', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 6),
-          Text('Search a place, tap the map, or use your GPS — no need to type coordinates.',
+          Text('Search a place, tap the map, or use your GPS. No need to type coordinates.',
               style: TextStyle(color: AppColors.grey, fontSize: 12)),
           const SizedBox(height: 10),
           TextField(

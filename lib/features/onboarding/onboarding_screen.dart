@@ -30,7 +30,7 @@ const _slides = [
   _Slide(
     tag: 'DISCOVER',
     title: 'EXPLORE\nACCRA.',
-    subtitle: 'Curated spots, hidden gems and local favourites — all on one smart, live map.',
+    subtitle: 'Curated spots, hidden gems and local favourites, all on one smart, live map.',
     icon: Icons.explore_rounded,
     accent: AppColors.yellow,
     image: 'https://images.unsplash.com/photo-1535320485706-44d43b919500?w=1200&q=80',
@@ -57,7 +57,7 @@ const _slides = [
   _Slide(
     tag: 'AI GUIDE',
     title: 'YOUR LOCAL\nGHANAIAN GUIDE.',
-    subtitle: 'Ask anything — the AI knows Accra like a friend who grew up there.',
+    subtitle: 'Ask anything. The AI knows Accra like a friend who grew up there.',
     icon: Icons.auto_awesome_rounded,
     accent: AppColors.yellow,
     image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80',
