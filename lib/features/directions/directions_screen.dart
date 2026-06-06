@@ -267,18 +267,29 @@ class _DirectionsScreenState extends State<DirectionsScreen>
         return; // no fake origin; _start surfaces a "turn on location" prompt
       }
 
-      // A REAL, fresh one-shot fix (not last-known) for the route origin.
+      // A REAL, fresh one-shot fix for the route origin.
       try {
         final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 12),
+          timeLimit: const Duration(seconds: 15),
         );
         _userLoc = ll.LatLng(pos.latitude, pos.longitude);
         _userHeading = pos.heading >= 0 ? pos.heading : null;
         debugPrint('[NAV] USER LAT: ${pos.latitude}  LNG: ${pos.longitude}'
             '  ACCURACY: ${pos.accuracy}m  TS: ${pos.timestamp}');
       } catch (e) {
-        debugPrint('[NAV] getCurrentPosition failed: $e (will wait for stream)');
+        debugPrint('[NAV] getCurrentPosition failed: $e');
+        // Cold/slow GPS (or standing still): fall back to the last-known fix.
+        // It's still a REAL position near the user — never a city-centre guess —
+        // and the live stream refines it moments later. Not supported on web.
+        try {
+          final last = await Geolocator.getLastKnownPosition();
+          if (last != null) {
+            _userLoc = ll.LatLng(last.latitude, last.longitude);
+            _userHeading = last.heading >= 0 ? last.heading : null;
+            debugPrint('[NAV] using LAST-KNOWN: ${last.latitude},${last.longitude}');
+          }
+        } catch (_) {/* unsupported on web */}
       }
 
       // Continuous updates. `??=` so retries never stack subscriptions.
@@ -1182,7 +1193,23 @@ class _DirectionsScreenState extends State<DirectionsScreen>
                 const SizedBox(height: 8),
                 Text(_error!, style: TextStyle(color: AppColors.greyLight, fontSize: 12), textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                ElevatedButton(onPressed: _retry, child: const Text('RETRY')),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  ElevatedButton(onPressed: _retry, child: const Text('RETRY')),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: () async {
+                      // Not supported on web (throws) — guard it.
+                      try {
+                        await Geolocator.openLocationSettings();
+                      } catch (_) {
+                        try {
+                          await Geolocator.openAppSettings();
+                        } catch (_) {/* web: no-op */}
+                      }
+                    },
+                    child: Text('LOCATION SETTINGS', style: TextStyle(color: AppColors.yellow, fontWeight: FontWeight.w700, fontSize: 12)),
+                  ),
+                ]),
               ] else ...[
                 Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                   _Stat(icon: Icons.timer_outlined, label: 'TIME', value: _eta, color: AppColors.yellow),
