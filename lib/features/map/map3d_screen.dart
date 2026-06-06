@@ -75,6 +75,9 @@ class _Map3DScreenState extends State<Map3DScreen> {
   bool _pendingRecenter = false;
   bool _follow = false;
   bool _is3D = false;
+  bool _headingUp = true; // rotate map to direction of travel while following
+  double _bearing = 0; // current camera bearing, tracked from map events
+  ll.LatLng? _prevLoc; // previous fix, for course calculation
 
   Geographic? _loadAnchor;
   bool _showSearchArea = false;
@@ -130,6 +133,33 @@ class _Map3DScreenState extends State<Map3DScreen> {
   String _hex(Color c) {
     final v = c.toARGB32() & 0xFFFFFF;
     return '#${v.toRadixString(16).padLeft(6, '0')}';
+  }
+
+  /// Compass bearing (degrees) from [a] to [b], for heading-up orientation.
+  double _bearingBetween(ll.LatLng a, ll.LatLng b) {
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final dLon = (b.longitude - a.longitude) * math.pi / 180;
+    final y = math.sin(dLon) * math.cos(lat2);
+    final x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
+  }
+
+  /// Speed-aware zoom — pull back at speed, zoom in when slow (metres/second).
+  double _zoomForSpeed(double mps) {
+    if (mps < 1.5) return 17; // walking / stopped
+    if (mps < 7) return 16; // city streets
+    if (mps < 14) return 15; // arterial roads
+    return 14; // highway
+  }
+
+  /// How far the camera bearing is from north (0–180°). Used to decide when to
+  /// show the compass-reset button.
+  double _northDeviation(double bearing) {
+    var b = bearing % 360;
+    if (b < 0) b += 360;
+    return b > 180 ? 360 - b : b;
   }
 
   /// A closed polygon ring approximating a geodesic circle, so danger zones
@@ -480,7 +510,6 @@ class _Map3DScreenState extends State<Map3DScreen> {
   }
 
   void _toggle3D() {
-    HapticFeedback.selectionClick();
     setState(() => _is3D = !_is3D);
     _map?.animateCamera(
       pitch: _is3D ? _tiltPitch : 0,
@@ -602,16 +631,17 @@ class _Map3DScreenState extends State<Map3DScreen> {
         if (_pendingRecenter) {
           _pendingRecenter = false;
           _follow = true;
+          _headingUp = true;
+          _prevLoc = ll.LatLng(pos.latitude, pos.longitude);
           _map?.animateCamera(
             center: _geo(pos.latitude, pos.longitude),
             zoom: 16,
             nativeDuration: const Duration(milliseconds: 800),
           );
         } else if (_follow) {
-          _map?.animateCamera(
-            center: _geo(pos.latitude, pos.longitude),
-            nativeDuration: const Duration(milliseconds: 700),
-          );
+          _applyFollowCamera(pos);
+        } else {
+          _prevLoc = ll.LatLng(pos.latitude, pos.longitude);
         }
       });
     } catch (_) {
@@ -621,10 +651,36 @@ class _Map3DScreenState extends State<Map3DScreen> {
     }
   }
 
+  /// Smoothly glide the follow camera to a new GPS fix, orienting to the
+  /// direction of travel (heading-up) and adapting zoom to speed. The ~1.1s
+  /// glide matches the GPS cadence so motion is continuous, not steppy.
+  void _applyFollowCamera(Position pos) {
+    final newLoc = ll.LatLng(pos.latitude, pos.longitude);
+    // Trust the device heading when actually moving; otherwise derive course
+    // from the previous fix so the map still orients sensibly at low speed.
+    double? course;
+    if (pos.heading >= 0 && pos.speed > 0.7) {
+      course = pos.heading;
+    } else if (_prevLoc != null && haversineMeters(_prevLoc!, newLoc) > 4) {
+      course = _bearingBetween(_prevLoc!, newLoc);
+    }
+    _prevLoc = newLoc;
+    final speed = pos.speed.isFinite && pos.speed > 0 ? pos.speed : 0.0;
+    _map?.animateCamera(
+      center: _geo(newLoc.latitude, newLoc.longitude),
+      zoom: _headingUp ? _zoomForSpeed(speed) : null,
+      bearing: _headingUp ? course : null,
+      pitch: _is3D ? _tiltPitch : null,
+      nativeDuration: const Duration(milliseconds: 1100),
+    );
+  }
+
   void _onLocatePressed() {
-    HapticFeedback.selectionClick();
     if (_userLoc != null) {
-      setState(() => _follow = true);
+      setState(() {
+        _follow = true;
+        _headingUp = true;
+      });
       _map?.animateCamera(
         center: _geo(_userLoc!.latitude, _userLoc!.longitude),
         zoom: 16,
@@ -649,6 +705,9 @@ class _Map3DScreenState extends State<Map3DScreen> {
           setState(() => _follow = false);
         }
       case MapEventMoveCamera(:final camera):
+        final wasRotated = _northDeviation(_bearing) > 2;
+        _bearing = camera.bearing;
+        if (wasRotated != (_northDeviation(_bearing) > 2)) setState(() {});
         _maybeShowSearchArea(camera);
       case MapEventClick(:final screenPoint):
         _handleTap(screenPoint);
@@ -761,7 +820,7 @@ class _Map3DScreenState extends State<Map3DScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            GestureDetector(
+            _Pressable(
               onTap: _onLocatePressed,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
@@ -902,11 +961,31 @@ class _Map3DScreenState extends State<Map3DScreen> {
 
   /// Right-side vertical stack: 3D toggle + zoom in/out.
   Widget _buildSideControls(bool hasCard) {
+    final rotated = _northDeviation(_bearing) > 2;
     return Positioned(
       right: 16,
       bottom: hasCard ? 230 : 110,
       child: Column(children: [
-        GestureDetector(
+        // Compass — appears only when the map is rotated; the needle tracks
+        // true north and tapping it snaps back to north-up.
+        if (rotated) ...[
+          _Pressable(
+            onTap: _resetNorth,
+            child: glass(
+              radius: 12,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Transform.rotate(
+                  angle: -_bearing * math.pi / 180,
+                  child: const Icon(Icons.navigation_rounded, color: AppColors.yellow, size: 20),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        _Pressable(
           onTap: _toggle3D,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
@@ -927,6 +1006,11 @@ class _Map3DScreenState extends State<Map3DScreen> {
         _SquareButton(icon: Icons.remove, onTap: () => _zoomBy(-1)),
       ]),
     );
+  }
+
+  void _resetNorth() {
+    _map?.animateCamera(bearing: 0, nativeDuration: const Duration(milliseconds: 500));
+    setState(() => _headingUp = false);
   }
 
   void _openDirections(Place p) {
@@ -1131,11 +1215,48 @@ class _SquareButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return _Pressable(
       onTap: onTap,
       child: glass(
         radius: 12,
         child: SizedBox(width: 42, height: 42, child: Icon(icon, color: AppColors.white, size: 20)),
+      ),
+    );
+  }
+}
+
+/// A tap target with subtle premium feedback: scale-down on press + a haptic
+/// tick on tap. Reused across the map's floating controls.
+class _Pressable extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _Pressable({required this.child, required this.onTap});
+
+  @override
+  State<_Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<_Pressable> {
+  double _scale = 1;
+  void _set(double s) {
+    if (mounted) setState(() => _scale = s);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _set(0.9),
+      onTapUp: (_) => _set(1),
+      onTapCancel: () => _set(1),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        widget.onTap();
+      },
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: widget.child,
       ),
     );
   }
