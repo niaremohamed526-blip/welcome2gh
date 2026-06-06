@@ -76,7 +76,6 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   ll.LatLng? _userLoc;
   double? _userHeading;
-  ll.LatLng? _prevLoc;
 
   List<ll.LatLng> _routePoints = [];
   List<double> _cum = []; // cumulative distance to each point (m)
@@ -93,8 +92,15 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   bool _navigating = false;
   bool _following = true;
+  // Navigation state machine flags (idle/preview -> active -> rerouting ->
+  // arrived / gps-lost). Kept as booleans to layer cleanly over _navigating.
+  bool _arrived = false;
+  bool _rerouting = false;
+  bool _gpsLost = false;
+  double _distAlong = 0; // metres travelled along the route (from snap)
 
   StreamSubscription<Position>? _locationSub;
+  Timer? _gpsWatchdog; // fires if no GPS fix arrives for a while
   DateTime _lastReroute = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Animations
@@ -120,6 +126,7 @@ class _DirectionsScreenState extends State<DirectionsScreen>
   @override
   void dispose() {
     _locationSub?.cancel();
+    _gpsWatchdog?.cancel();
     _drawCtrl.dispose();
     _pulseCtrl.dispose();
     super.dispose();
@@ -180,6 +187,63 @@ class _DirectionsScreenState extends State<DirectionsScreen>
     return 15;
   }
 
+  // ── Map matching (snap GPS to the active route) ─────────────────────────────
+
+  static const double _mPerLat = 110540.0;
+  double _mPerLon(double lat) => 111320.0 * math.cos(lat * math.pi / 180);
+
+  /// Project [p] onto segment a→b using a local planar approximation.
+  /// Returns the closest point on the segment and the fraction [t] along it.
+  ({ll.LatLng pt, double t}) _projectOntoSeg(ll.LatLng p, ll.LatLng a, ll.LatLng b) {
+    final mLon = _mPerLon(a.latitude);
+    final bx = (b.longitude - a.longitude) * mLon, by = (b.latitude - a.latitude) * _mPerLat;
+    final px = (p.longitude - a.longitude) * mLon, py = (p.latitude - a.latitude) * _mPerLat;
+    final len2 = bx * bx + by * by;
+    var t = len2 <= 0 ? 0.0 : (px * bx + py * by) / len2;
+    t = t.clamp(0.0, 1.0);
+    return (
+      pt: ll.LatLng(a.latitude + (b.latitude - a.latitude) * t, a.longitude + (b.longitude - a.longitude) * t),
+      t: t,
+    );
+  }
+
+  /// Snap a raw GPS fix to the nearest point on the route. Returns the snapped
+  /// point, the bearing of that segment (for heading-up), the distance
+  /// travelled along the route, and how far off-route the raw fix was (metres).
+  ({ll.LatLng point, double bearing, double along, double off}) _snapToRoute(ll.LatLng raw) {
+    if (_routePoints.length < 2) {
+      return (point: raw, bearing: _userHeading ?? 0, along: _distAlong, off: 0);
+    }
+    var best = double.infinity;
+    var bestPt = raw;
+    var bestAlong = 0.0;
+    var bestBearing = 0.0;
+    for (var i = 0; i < _routePoints.length - 1; i++) {
+      final a = _routePoints[i], b = _routePoints[i + 1];
+      final pr = _projectOntoSeg(raw, a, b);
+      final d = haversineMeters(raw, pr.pt);
+      if (d < best) {
+        best = d;
+        bestPt = pr.pt;
+        bestAlong = _cum[i] + (_cum[i + 1] - _cum[i]) * pr.t;
+        bestBearing = _bearingBetween(a, b);
+      }
+    }
+    return (point: bestPt, bearing: bestBearing, along: bestAlong, off: best);
+  }
+
+  void _updateUserPuck(ll.LatLng p, double bearing) {
+    if (!_styleReady) return;
+    _style?.updateGeoJsonSource(id: 'user', data: _pointFc(p, {'b': bearing}));
+  }
+
+  void _resetGpsWatchdog() {
+    _gpsWatchdog?.cancel();
+    _gpsWatchdog = Timer(const Duration(seconds: 12), () {
+      if (mounted && _navigating && !_arrived) setState(() => _gpsLost = true);
+    });
+  }
+
   // ── Location ────────────────────────────────────────────────────────────────
 
   Future<void> _initLocation() async {
@@ -209,40 +273,49 @@ class _DirectionsScreenState extends State<DirectionsScreen>
       _locationSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 5,
+          distanceFilter: 4,
         ),
-      ).listen((pos) {
-        if (!mounted) return;
-        final loc = ll.LatLng(pos.latitude, pos.longitude);
-        setState(() {
-          _userLoc = loc;
-          _userHeading = pos.heading >= 0 ? pos.heading : null;
-        });
-        if (_navigating) {
-          if (_following) _applyNavCamera(pos);
-          _updateProgress();
-          _maybeReroute();
-        }
-        _prevLoc = loc;
-      });
+      ).listen(_onPosition);
     } catch (_) {
       if (mounted) setState(() => _userLoc = const ll.LatLng(5.6037, -0.1870));
     }
   }
 
-  /// Immersive chase camera: tilted, heading-up, zoom adapts to speed.
-  void _applyNavCamera(Position pos) {
-    final loc = ll.LatLng(pos.latitude, pos.longitude);
-    double? course;
-    if (pos.heading >= 0 && pos.speed > 0.7) {
-      course = pos.heading;
-    } else if (_prevLoc != null && haversineMeters(_prevLoc!, loc) > 4) {
-      course = _bearingBetween(_prevLoc!, loc);
+  /// Handle each GPS fix. During navigation the raw fix is snapped to the route
+  /// (local map matching) so the puck rides the road and drift is corrected.
+  void _onPosition(Position pos) {
+    if (!mounted) return;
+    final raw = ll.LatLng(pos.latitude, pos.longitude);
+    if (pos.heading >= 0) _userHeading = pos.heading;
+    if (_gpsLost) setState(() => _gpsLost = false);
+    if (_navigating) _resetGpsWatchdog();
+
+    if (_navigating && !_arrived && _routePoints.length >= 2) {
+      final snap = _snapToRoute(raw);
+      _distAlong = snap.along;
+      // Heading-up course: follow the road bearing when on-route, otherwise
+      // fall back to the device heading.
+      final course = snap.off < 40
+          ? snap.bearing
+          : (pos.heading >= 0 ? pos.heading : snap.bearing);
+      _updateUserPuck(snap.point, course);
+      setState(() => _userLoc = snap.point);
+      if (_following) _followNav(snap.point, course, pos.speed);
+      _updateNavProgress();
+      _maybeReroute(snap.off);
+    } else {
+      setState(() => _userLoc = raw);
+      _updateUserPuck(raw, _userHeading ?? 0);
     }
-    final speed = pos.speed.isFinite && pos.speed > 0 ? pos.speed : 0.0;
+  }
+
+  /// Immersive chase camera: tilted, heading-up, zoom adapts to speed. The
+  /// camera centres on the snapped point so the world glides under a fixed puck.
+  void _followNav(ll.LatLng p, double course, double speed) {
+    final spd = speed.isFinite && speed > 0 ? speed : 0.0;
     _map?.animateCamera(
-      center: _g(loc),
-      zoom: _zoomForSpeed(speed),
+      center: _g(p),
+      zoom: _zoomForSpeed(spd),
       bearing: course,
       pitch: 58,
       nativeDuration: const Duration(milliseconds: 1100),
@@ -289,6 +362,8 @@ class _DirectionsScreenState extends State<DirectionsScreen>
         _steps = steps;
         _currentStepIndex = 0;
         _remainingM = _total;
+        _distAlong = 0;
+        _rerouting = false;
         _loading = false;
       });
 
@@ -451,10 +526,42 @@ class _DirectionsScreenState extends State<DirectionsScreen>
       paint: {'circle-radius': 5.0, 'circle-color': '#FFFFFF'},
     ));
 
-    _styleReady = true;
+    // User location puck — snapped to the route during navigation. A blue dot
+    // + soft halo + a heading arrow that rotates to the travel direction.
+    await style.addSource(const GeoJsonSource(id: 'user', data: _emptyFc));
     try {
-      await _map?.enableLocation();
-    } catch (_) {/* optional */}
+      await style.addImageFromIconData(
+        id: 'nav-arrow',
+        iconData: Icons.navigation_rounded,
+        color: const Color(0xFFFFFFFF),
+        size: 120,
+      );
+    } catch (_) {/* already added */}
+    await style.addLayer(const CircleStyleLayer(
+      id: 'user-halo',
+      sourceId: 'user',
+      paint: {'circle-radius': 18.0, 'circle-color': '#1E88E5', 'circle-opacity': 0.18},
+    ));
+    await style.addLayer(const CircleStyleLayer(
+      id: 'user-dot',
+      sourceId: 'user',
+      paint: {'circle-radius': 9.0, 'circle-color': '#1E88E5', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3.0},
+    ));
+    await style.addLayer(const SymbolStyleLayer(
+      id: 'user-arrow',
+      sourceId: 'user',
+      layout: {
+        'icon-image': 'nav-arrow',
+        'icon-size': 0.13,
+        'icon-rotate': ['get', 'b'],
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    ));
+
+    _styleReady = true;
+    if (_userLoc != null) _updateUserPuck(_userLoc!, _userHeading ?? 0);
     if (_routePoints.length >= 2) _onRouteReady();
   }
 
@@ -490,7 +597,12 @@ class _DirectionsScreenState extends State<DirectionsScreen>
     setState(() {
       _navigating = true;
       _following = true;
+      _arrived = false;
+      _gpsLost = false;
+      _rerouting = false;
+      _distAlong = 0;
     });
+    _resetGpsWatchdog();
     final u = _userLoc;
     if (u != null) {
       double bearing = _userHeading ?? 0;
@@ -508,9 +620,13 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   void _exitNavigation() {
     HapticFeedback.selectionClick();
+    _gpsWatchdog?.cancel();
     setState(() {
       _navigating = false;
       _following = true;
+      _arrived = false;
+      _gpsLost = false;
+      _rerouting = false;
     });
     _fitRoute();
   }
@@ -542,48 +658,42 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   // ── Live progress / steps ─────────────────────────────────────────────────
 
-  void _updateProgress() {
-    if (_steps.isEmpty || _userLoc == null || _routePoints.isEmpty) return;
-    double minD = double.infinity;
-    int closest = 0;
-    for (var i = 0; i < _routePoints.length; i++) {
-      final d = haversineMeters(_userLoc!, _routePoints[i]);
-      if (d < minD) {
-        minD = d;
-        closest = i;
-      }
-    }
-    final traveled = _cum.isEmpty ? 0.0 : _cum[closest];
-    _remainingM = (_total - traveled).clamp(0, _total);
+  void _updateNavProgress() {
+    if (_steps.isEmpty || _userLoc == null || _total <= 0) return;
+    _remainingM = (_total - _distAlong).clamp(0, _total);
 
+    // Arrival — near the end of the route or close to the destination point.
+    final toDest = haversineMeters(_userLoc!, _dest);
+    if (!_arrived && (_remainingM < 25 || toDest < 30)) {
+      HapticFeedback.heavyImpact();
+      setState(() {
+        _arrived = true;
+        _following = false;
+        _currentStepIndex = _steps.length - 1;
+      });
+      return;
+    }
+
+    // Advance the active step by distance travelled along the route.
     double cumulative = 0;
     int newStep = _steps.length - 1;
     for (var i = 0; i < _steps.length; i++) {
       cumulative += _steps[i].distanceM;
-      if (traveled < cumulative) {
+      if (_distAlong < cumulative) {
         newStep = i;
         break;
       }
     }
-    if (newStep != _currentStepIndex && mounted) {
-      HapticFeedback.lightImpact();
-      setState(() => _currentStepIndex = newStep);
-    } else if (mounted) {
-      setState(() {}); // refresh remaining distance/ETA
-    }
+    if (newStep != _currentStepIndex) HapticFeedback.lightImpact();
+    setState(() => _currentStepIndex = newStep);
   }
 
-  void _maybeReroute() {
-    if (_routePoints.isEmpty || _userLoc == null) return;
-    double minD = double.infinity;
-    for (final p in _routePoints) {
-      final d = haversineMeters(_userLoc!, p);
-      if (d < minD) minD = d;
-    }
+  void _maybeReroute(double offRoute) {
     final now = DateTime.now();
-    if (minD > 60 && now.difference(_lastReroute).inSeconds > 8) {
+    if (offRoute > 50 && now.difference(_lastReroute).inSeconds > 8) {
       _lastReroute = now;
       HapticFeedback.lightImpact();
+      setState(() => _rerouting = true);
       _fetchRoute(reroute: true);
     }
   }
@@ -671,13 +781,34 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   // ── Display helpers ───────────────────────────────────────────────────────
 
+  /// Estimated seconds remaining. Built from the route's average speed scaled
+  /// by a per-mode congestion factor (free-flow OSRM times read optimistic, so
+  /// driving is padded most). Recomputed every GPS fix from progress along the
+  /// route — not a static distance/speed number.
+  double get _remainingSec {
+    if (_durationMin == null || _total <= 0) return 0;
+    final avgMps = _total / (_durationMin! * 60); // route average speed (m/s)
+    final factor = _profile == 'driving'
+        ? 1.25
+        : _profile == 'cycling'
+            ? 1.1
+            : 1.05;
+    final dist = _navigating ? _remainingM : _total;
+    return dist / (avgMps > 0 ? avgMps : 5) * factor;
+  }
+
   String get _eta {
     if (_durationMin == null) return '—';
-    final mins = _navigating && _total > 0
-        ? (_durationMin! * (_remainingM / _total)).round()
-        : _durationMin!;
+    final mins = (_remainingSec / 60).round();
+    if (mins < 1) return '<1 min';
     if (mins < 60) return '$mins min';
     return '${mins ~/ 60}h ${mins % 60}m';
+  }
+
+  /// Clock time of arrival, e.g. "14:32".
+  String get _arrivalClock {
+    final t = DateTime.now().add(Duration(seconds: _remainingSec.round()));
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
 
   String get _dist {
@@ -723,8 +854,8 @@ class _DirectionsScreenState extends State<DirectionsScreen>
           children: const [SourceAttribution()],
         ),
 
-        // Navigation turn banner (top) — only while navigating.
-        if (_navigating && currentStep != null)
+        // Navigation turn banner (top) — only while actively navigating.
+        if (_navigating && !_arrived && currentStep != null)
           Positioned(
             top: topPad + 10,
             left: 12,
@@ -734,6 +865,19 @@ class _DirectionsScreenState extends State<DirectionsScreen>
               icon: _maneuverIcon(currentStep.maneuverType, currentStep.modifier),
               stepDist: _stepDist(currentStep.distanceM),
               onExit: _exitNavigation,
+            ),
+          ),
+
+        // Rerouting / GPS-lost status pill (below the turn banner).
+        if (_navigating && !_arrived && (_rerouting || _gpsLost))
+          Positioned(
+            top: topPad + (currentStep != null ? 96 : 12),
+            left: 0,
+            right: 0,
+            child: Center(
+              child: _gpsLost
+                  ? _statusPill('Searching for GPS…', Icons.gps_off_rounded)
+                  : _statusPill('Rerouting…', Icons.alt_route_rounded),
             ),
           ),
 
@@ -780,9 +924,73 @@ class _DirectionsScreenState extends State<DirectionsScreen>
             position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(anim),
             child: child,
           ),
-          child: _navigating ? _navHud() : _planningPanel(),
+          child: _arrived
+              ? const SizedBox.shrink()
+              : (_navigating ? _navHud() : _planningPanel()),
         ),
+
+        // Arrival overlay.
+        if (_arrived) _arrivalCard(),
       ]),
+    );
+  }
+
+  Widget _statusPill(String text, IconData icon) => glass(
+        radius: 22,
+        alpha: 0.85,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: AppColors.yellow, size: 16),
+            const SizedBox(width: 8),
+            Text(text, style: const TextStyle(color: AppColors.yellow, fontSize: 13, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      );
+
+  Widget _arrivalCard() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.navyCard,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.green.withValues(alpha: 0.5)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 18, offset: const Offset(0, 6))],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
+                child: const Icon(Icons.flag_rounded, color: AppColors.green, size: 28),
+              ),
+              const SizedBox(height: 12),
+              Text("You've arrived", style: TextStyle(color: AppColors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(widget.destName, textAlign: TextAlign.center, style: TextStyle(color: AppColors.grey, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    Navigator.of(context).maybePop();
+                  },
+                  child: const Text('DONE'),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 
@@ -854,7 +1062,7 @@ class _DirectionsScreenState extends State<DirectionsScreen>
             child: Row(children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 Text(_eta, style: TextStyle(color: AppColors.yellow, fontSize: 22, fontWeight: FontWeight.w800)),
-                Text('arrival', style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                Text('arrive $_arrivalClock', style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
               ]),
               const SizedBox(width: 18),
               Container(width: 1, height: 34, color: AppColors.cardBorder),
