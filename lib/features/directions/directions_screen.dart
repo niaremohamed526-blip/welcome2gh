@@ -134,7 +134,16 @@ class _DirectionsScreenState extends State<DirectionsScreen>
 
   Future<void> _start() async {
     await _initLocation();
-    await _fetchRoute();
+    if (_userLoc != null) {
+      await _fetchRoute();
+    } else if (mounted) {
+      // No real fix: never route from a fake origin (that's what produced the
+      // bogus 9.9 km / 2h results). Ask the user to enable location instead.
+      setState(() {
+        _loading = false;
+        _error = 'Turn on location to get directions from where you are.';
+      });
+    }
   }
 
   // ── Coordinate helpers ──────────────────────────────────────────────────────
@@ -254,30 +263,50 @@ class _DirectionsScreenState extends State<DirectionsScreen>
       }
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever) {
-        if (mounted) setState(() => _userLoc = const ll.LatLng(5.6037, -0.1870));
-        return;
+        debugPrint('[NAV] location permission denied: $perm — not routing.');
+        return; // no fake origin; _start surfaces a "turn on location" prompt
       }
 
+      // A REAL, fresh one-shot fix (not last-known) for the route origin.
       try {
         final pos = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high);
-        if (mounted) {
-          setState(() {
-            _userLoc = ll.LatLng(pos.latitude, pos.longitude);
-            _userHeading = pos.heading >= 0 ? pos.heading : null;
-          });
-        }
-      } catch (_) {/* fall back to stream / Accra default */}
-      _userLoc ??= const ll.LatLng(5.6037, -0.1870);
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 12),
+        );
+        _userLoc = ll.LatLng(pos.latitude, pos.longitude);
+        _userHeading = pos.heading >= 0 ? pos.heading : null;
+        debugPrint('[NAV] USER LAT: ${pos.latitude}  LNG: ${pos.longitude}'
+            '  ACCURACY: ${pos.accuracy}m  TS: ${pos.timestamp}');
+      } catch (e) {
+        debugPrint('[NAV] getCurrentPosition failed: $e (will wait for stream)');
+      }
 
-      _locationSub = Geolocator.getPositionStream(
+      // Continuous updates. `??=` so retries never stack subscriptions.
+      _locationSub ??= Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 4,
         ),
       ).listen(_onPosition);
-    } catch (_) {
-      if (mounted) setState(() => _userLoc = const ll.LatLng(5.6037, -0.1870));
+    } catch (e) {
+      debugPrint('[NAV] location error: $e');
+    }
+  }
+
+  /// Re-acquire location then (re)compute the route. Used by the RETRY button.
+  Future<void> _retry() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    if (_userLoc == null) await _initLocation();
+    if (_userLoc != null) {
+      await _fetchRoute();
+    } else if (mounted) {
+      setState(() {
+        _loading = false;
+        _error = 'Still no location. Check that location is on and permitted for this app.';
+      });
     }
   }
 
@@ -306,6 +335,12 @@ class _DirectionsScreenState extends State<DirectionsScreen>
     } else {
       setState(() => _userLoc = raw);
       _updateUserPuck(raw, _userHeading ?? 0);
+      // Recover if the one-shot fix failed: now that we have a real position,
+      // compute the route from it (instead of never routing).
+      if (_routePoints.isEmpty && !_loading) {
+        _error = null;
+        _fetchRoute();
+      }
     }
   }
 
@@ -325,7 +360,15 @@ class _DirectionsScreenState extends State<DirectionsScreen>
   // ── Routing ─────────────────────────────────────────────────────────────────
 
   Future<void> _fetchRoute({bool reroute = false}) async {
-    if (_userLoc == null) return;
+    if (_userLoc == null) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'No location yet. Enable location and retry.';
+        });
+      }
+      return;
+    }
     if (!reroute) {
       setState(() {
         _loading = true;
@@ -334,12 +377,16 @@ class _DirectionsScreenState extends State<DirectionsScreen>
     }
     try {
       final host = _osrmHost[_profile] ?? _osrmHost['driving']!;
+      // OSRM expects coordinates as lon,lat (NOT lat,lon).
       final uri = Uri.parse(
         '$host/route/v1/driving/'
         '${_userLoc!.longitude},${_userLoc!.latitude};'
         '${widget.destLng},${widget.destLat}'
         '?overview=full&geometries=geojson&steps=true',
       );
+      debugPrint('[NAV] ORIGIN ${_userLoc!.latitude},${_userLoc!.longitude}'
+          '  ->  DEST ${widget.destLat},${widget.destLng}  (profile=$_profile)');
+      debugPrint('[NAV] OSRM URL: $uri');
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) throw 'Server error ${response.statusCode}';
       final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -366,6 +413,16 @@ class _DirectionsScreenState extends State<DirectionsScreen>
         _rerouting = false;
         _loading = false;
       });
+
+      final straightKm = haversineMeters(_userLoc!, _dest) / 1000;
+      debugPrint('[NAV] straight-line=${straightKm.toStringAsFixed(2)}km  '
+          'ROUTE=${_distanceKm!.toStringAsFixed(2)}km  ETA(raw)=${_durationMin}min'
+          '  profile=$_profile');
+      if (straightKm > 3) {
+        debugPrint('[NAV] WARNING: origin and destination are '
+            '${straightKm.toStringAsFixed(1)}km apart as the crow flies — if that '
+            'seems wrong, the destination coordinates are likely off.');
+      }
 
       _onRouteReady(reframe: !reroute && !_navigating);
 
@@ -1125,7 +1182,7 @@ class _DirectionsScreenState extends State<DirectionsScreen>
                 const SizedBox(height: 8),
                 Text(_error!, style: TextStyle(color: AppColors.greyLight, fontSize: 12), textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                ElevatedButton(onPressed: () => _fetchRoute(), child: const Text('RETRY')),
+                ElevatedButton(onPressed: _retry, child: const Text('RETRY')),
               ] else ...[
                 Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                   _Stat(icon: Icons.timer_outlined, label: 'TIME', value: _eta, color: AppColors.yellow),
