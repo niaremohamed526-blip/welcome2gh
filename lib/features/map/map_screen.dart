@@ -716,6 +716,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                   _buildTopControls(st),
                   _buildZoomControls(st),
                   if (st.places.isNotEmpty) _buildListButton(st),
+                  if (st.selectedPlace == null) _build3DTryButton(),
                   if (st.selectedPlace != null) _buildPlaceCard(st.selectedPlace!),
                 ],
               );
@@ -993,6 +994,36 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
             const SizedBox(width: 8),
             const Text('TAP TO RETRY', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
           ]),
+        ),
+      ),
+    );
+  }
+
+  // TEMP (maplibre-migration branch): quick entry to preview the new MapLibre
+  // 3D map. Remove when the engine swap is finalized.
+  Widget _build3DTryButton() {
+    return Positioned(
+      bottom: 120,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            context.push('/map3d');
+          },
+          child: glass(
+            radius: 24,
+            alpha: 0.7,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.threed_rotation_rounded, color: AppColors.yellow, size: 18),
+                SizedBox(width: 8),
+                Text('Try 3D Map (beta)', style: TextStyle(color: AppColors.yellow, fontSize: 13, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
         ),
       ),
     );
