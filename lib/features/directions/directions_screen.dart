@@ -11,7 +11,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre/maplibre.dart' hide Position;
 import '../../shared/theme/app_theme.dart';
 import '../../core/geo/geo_math.dart';
-import '../map/map_screen.dart' show glass;
+import '../map/map_helpers.dart' show glass;
 
 // ── Data model ──────────────────────────────────────────────────────────────
 

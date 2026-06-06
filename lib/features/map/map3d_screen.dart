@@ -17,9 +17,7 @@ import '../../core/routing_service.dart';
 import '../../core/geo/geo_math.dart';
 import '../../shared/widgets/app_image.dart';
 import '../directions/directions_screen.dart';
-// Reuse the existing design helpers so the two map screens stay visually
-// identical during the migration.
-import 'map_screen.dart' show categoryColor, categoryIcon, glass;
+import 'map_helpers.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────
 /// MapLibre (vector + 3D) version of the map screen.
