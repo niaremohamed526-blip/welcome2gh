@@ -59,6 +59,10 @@ class _Map3DScreenState extends State<Map3DScreen> {
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
 
+  /// Category icon ids already registered as map images (MapLibre throws on a
+  /// duplicate add, so we never add the same id twice).
+  final Set<String> _icons = {};
+
   List<Place> _places = [];
   List<AlertItem> _alerts = [];
   String _filter = 'All';
@@ -235,19 +239,13 @@ class _Map3DScreenState extends State<Map3DScreen> {
   Future<void> _onStyleLoaded(StyleController style) async {
     _style = style;
 
-    // Register a white glyph image per category for the marker icon layer.
+    // A style (re)load clears all images, so re-register from scratch. Each
+    // category gets one white glyph image for the marker symbol layer.
+    _icons.clear();
     final cats = {for (final p in _places) p.category.toLowerCase()};
     cats.addAll(_categories.map((c) => c.value.toLowerCase()));
     for (final c in cats) {
-      if (c == 'all') continue;
-      try {
-        await style.addImageFromIconData(
-          id: 'cat-$c',
-          iconData: categoryIcon(c),
-          size: 120,
-          color: Colors.white,
-        );
-      } catch (_) {/* ignore individual icon failures */}
+      await _ensureIcon(style, c);
     }
 
     await style.addSource(const GeoJsonSource(id: _placesSrc, data: _emptyFc));
@@ -381,15 +379,26 @@ class _Map3DScreenState extends State<Map3DScreen> {
   Future<void> _registerMissingIcons(List<Place> places) async {
     final style = _style;
     if (style == null) return;
-    for (final c in {for (final p in places) p.category.toLowerCase()}) {
-      try {
-        await style.addImageFromIconData(
-          id: 'cat-$c',
-          iconData: categoryIcon(c),
-          size: 120,
-          color: Colors.white,
-        );
-      } catch (_) {/* already added or failed — ignore */}
+    for (final p in places) {
+      await _ensureIcon(style, p.category);
+    }
+  }
+
+  /// Registers a white category glyph as a map image exactly once. MapLibre
+  /// throws if an image id already exists, so we guard with [_icons].
+  Future<void> _ensureIcon(StyleController style, String category) async {
+    final c = category.toLowerCase();
+    if (c.isEmpty || c == 'all') return;
+    if (!_icons.add('cat-$c')) return; // already registered
+    try {
+      await style.addImageFromIconData(
+        id: 'cat-$c',
+        iconData: categoryIcon(c),
+        size: 120,
+        color: Colors.white,
+      );
+    } catch (_) {
+      _icons.remove('cat-$c'); // allow a later retry
     }
   }
 
@@ -745,7 +754,22 @@ class _Map3DScreenState extends State<Map3DScreen> {
       return;
     }
     final id = props['id'];
-    if (id is String) _selectPlace(id);
+    if (id is String) {
+      _selectPlace(id);
+      // Gently ease the tapped place toward the centre so the bottom card never
+      // covers it, zooming in a little if we're far out.
+      final p = _places.where((e) => e.id == id).firstOrNull;
+      if (p != null) {
+        final cam = _map?.camera;
+        final z = (cam == null || cam.zoom < 15) ? 15.0 : cam.zoom;
+        _map?.animateCamera(
+          center: _geo(p.lat, p.lng),
+          zoom: z,
+          pitch: _is3D ? _tiltPitch : null,
+          nativeDuration: const Duration(milliseconds: 500),
+        );
+      }
+    }
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -778,6 +802,7 @@ class _Map3DScreenState extends State<Map3DScreen> {
           if (selected != null) _bottomScrim(),
           _buildTopControls(),
           _buildSideControls(selected != null),
+          if (_places.isNotEmpty) _buildListButton(selected != null),
           if (selected != null) _buildPlaceCard(selected),
         ]);
       }),
@@ -1009,6 +1034,106 @@ class _Map3DScreenState extends State<Map3DScreen> {
   void _resetNorth() {
     _map?.animateCamera(bearing: 0, nativeDuration: const Duration(milliseconds: 500));
     setState(() => _headingUp = false);
+  }
+
+  /// Bottom-left button opening a distance-sorted list of the loaded places.
+  Widget _buildListButton(bool hasCard) {
+    return Positioned(
+      left: 16,
+      bottom: hasCard ? 230 : 110,
+      child: _Pressable(
+        onTap: _showNearbyList,
+        child: glass(
+          radius: 14,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(Icons.format_list_bulleted_rounded, color: AppColors.yellow, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showNearbyList() {
+    if (_places.isEmpty) return;
+    final cam = _map?.camera;
+    final ref = _userLoc ??
+        (cam != null ? ll.LatLng(cam.center.lat, cam.center.lon) : ll.LatLng(_accra.lat, _accra.lon));
+    final sorted = [..._places]
+      ..sort((a, b) => haversineMeters(ref, ll.LatLng(a.lat, a.lng))
+          .compareTo(haversineMeters(ref, ll.LatLng(b.lat, b.lng))));
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.navyCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollCtrl) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 6),
+            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.grey.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
+            child: Row(children: [
+              const Icon(Icons.near_me_rounded, color: AppColors.yellow, size: 18),
+              const SizedBox(width: 10),
+              Text('Nearby places', style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('${sorted.length}', style: TextStyle(color: AppColors.grey, fontSize: 12)),
+            ]),
+          ),
+          Divider(color: AppColors.cardBorder, height: 1),
+          Expanded(
+            child: ListView.builder(
+              controller: scrollCtrl,
+              itemCount: sorted.length,
+              itemBuilder: (_, i) {
+                final p = sorted[i];
+                final color = categoryColor(p.category);
+                final dist = _formatDistance(haversineMeters(ref, ll.LatLng(p.lat, p.lng)));
+                return ListTile(
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _follow = false);
+                    _selectPlace(p.id);
+                    _map?.animateCamera(
+                      center: _geo(p.lat, p.lng),
+                      zoom: 16,
+                      pitch: _is3D ? _tiltPitch : null,
+                      nativeDuration: const Duration(milliseconds: 700),
+                    );
+                  },
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                    child: Icon(categoryIcon(p.category), color: color, size: 20),
+                  ),
+                  title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                  subtitle: Text('${p.category} · ${p.address}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.grey, fontSize: 12)),
+                  trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.star_rounded, color: AppColors.yellow, size: 13),
+                      const SizedBox(width: 2),
+                      Text(p.rating.toStringAsFixed(1), style: TextStyle(color: AppColors.white, fontSize: 12)),
+                    ]),
+                    const SizedBox(height: 3),
+                    Text(dist, style: TextStyle(color: AppColors.yellow, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ]),
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 
   void _openDirections(Place p) {
