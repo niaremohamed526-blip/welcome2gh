@@ -3,6 +3,37 @@ import '../../shared/theme/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/supabase_service.dart';
 
+/// The service / item types people can report a price for. Stored as free text
+/// in `fair_prices.service_type`, so this list can grow without a DB migration.
+const List<String> kFairServiceTypes = [
+  'taxi', 'trotro', 'ride_hailing', 'restaurant', 'market_item', 'grocery',
+  'data', 'accommodation', 'fuel', 'salon', 'water', 'place', 'other',
+];
+
+/// Human label for a service type, e.g. 'ride_hailing' -> 'RIDE HAILING'.
+String fairServiceLabel(String s) => s.replaceAll('_', ' ').toUpperCase();
+
+/// Service types that are route-based (need From/To instead of an item name).
+bool fairIsRoute(String s) => s == 'taxi' || s == 'trotro' || s == 'ride_hailing';
+
+IconData fairServiceIcon(String t) {
+  switch (t) {
+    case 'taxi': return Icons.local_taxi_rounded;
+    case 'trotro': return Icons.directions_bus_rounded;
+    case 'ride_hailing': return Icons.directions_car_rounded;
+    case 'restaurant': return Icons.restaurant_rounded;
+    case 'market_item': return Icons.shopping_bag_rounded;
+    case 'grocery': return Icons.local_grocery_store_rounded;
+    case 'data': return Icons.signal_cellular_alt_rounded;
+    case 'accommodation': return Icons.hotel_rounded;
+    case 'fuel': return Icons.local_gas_station_rounded;
+    case 'salon': return Icons.content_cut_rounded;
+    case 'water': return Icons.water_drop_rounded;
+    case 'place': return Icons.place_rounded;
+    default: return Icons.attach_money_rounded;
+  }
+}
+
 class FairPriceScreen extends StatefulWidget {
   const FairPriceScreen({super.key});
 
@@ -14,7 +45,7 @@ class _FairPriceScreenState extends State<FairPriceScreen> {
   List<FairPrice> _prices = [];
   bool _loading = true;
   String _filter = 'All';
-  final _filters = ['All', 'taxi', 'trotro', 'restaurant', 'market_item'];
+  final _filters = ['All', ...kFairServiceTypes];
 
   @override
   void initState() {
@@ -69,7 +100,7 @@ class _FairPriceScreenState extends State<FairPriceScreen> {
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(color: active ? AppColors.yellow : AppColors.navyCard, borderRadius: BorderRadius.circular(10), border: Border.all(color: active ? AppColors.yellow : AppColors.cardBorder)),
-                    child: Text(f.toUpperCase(), style: TextStyle(color: active ? AppColors.navy : AppColors.grey, fontWeight: FontWeight.w600, fontSize: 11)),
+                    child: Text(f == 'All' ? 'ALL' : fairServiceLabel(f), style: TextStyle(color: active ? AppColors.navy : AppColors.grey, fontWeight: FontWeight.w600, fontSize: 11)),
                   ),
                 );
               }).toList(),
@@ -94,13 +125,13 @@ class _FairPriceScreenState extends State<FairPriceScreen> {
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(color: AppColors.yellow.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                              child: Icon(_iconFor(p.serviceType), color: AppColors.yellow, size: 20),
+                              child: Icon(fairServiceIcon(p.serviceType), color: AppColors.yellow, size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Text(p.itemName ?? '${p.routeFrom ?? ''} → ${p.routeTo ?? ''}', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600, fontSize: 14)),
                               const SizedBox(height: 2),
-                              Text(p.serviceType.toUpperCase(), style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                              Text(fairServiceLabel(p.serviceType), style: TextStyle(color: AppColors.grey, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
                             ])),
                             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                               Text('GHS ${p.amountGhs.toStringAsFixed(0)}', style: const TextStyle(color: AppColors.yellow, fontWeight: FontWeight.w800, fontSize: 16)),
@@ -115,15 +146,6 @@ class _FairPriceScreenState extends State<FairPriceScreen> {
     );
   }
 
-  IconData _iconFor(String t) {
-    switch (t) {
-      case 'taxi': return Icons.local_taxi_rounded;
-      case 'trotro': return Icons.directions_bus_rounded;
-      case 'restaurant': return Icons.restaurant_rounded;
-      case 'market_item': return Icons.shopping_bag_rounded;
-      default: return Icons.attach_money_rounded;
-    }
-  }
 }
 
 class _ReportPriceSheet extends StatefulWidget {
@@ -177,7 +199,7 @@ class _ReportPriceSheetState extends State<_ReportPriceSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isRoute = _service == 'taxi' || _service == 'trotro';
+    final isRoute = fairIsRoute(_service);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 24),
       child: SingleChildScrollView(
@@ -186,17 +208,20 @@ class _ReportPriceSheetState extends State<_ReportPriceSheet> {
           const SizedBox(height: 8),
           Text('Help others avoid scams', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 20),
-          Row(children: ['taxi', 'trotro', 'restaurant', 'market_item'].map((s) {
+          Wrap(spacing: 8, runSpacing: 8, children: kFairServiceTypes.map((s) {
             final active = s == _service;
-            return Expanded(child: GestureDetector(
+            return GestureDetector(
               onTap: () => setState(() => _service = s),
               child: Container(
-                margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(color: active ? AppColors.yellow : AppColors.navy, borderRadius: BorderRadius.circular(8), border: Border.all(color: active ? AppColors.yellow : AppColors.cardBorder)),
-                child: Center(child: Text(s.toUpperCase(), style: TextStyle(color: active ? AppColors.navy : AppColors.grey, fontSize: 9, fontWeight: FontWeight.w700))),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(fairServiceIcon(s), size: 13, color: active ? AppColors.navy : AppColors.grey),
+                  const SizedBox(width: 5),
+                  Text(fairServiceLabel(s), style: TextStyle(color: active ? AppColors.navy : AppColors.grey, fontSize: 10, fontWeight: FontWeight.w700)),
+                ]),
               ),
-            ));
+            );
           }).toList()),
           const SizedBox(height: 16),
           if (isRoute) ...[

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'supabase_service.dart';
+import 'settings_controller.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/auth/login_screen.dart';
@@ -117,13 +118,17 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       body: widget.child,
-      bottomNavigationBar: _BottomNav(
-        index: index,
-        onTap: (i) {
-          HapticFeedback.selectionClick();
-          // Tapping the already-active tab is a no-op rather than a reload.
-          if (i != index) context.go(_tabs[i]);
-        },
+      // Rebuild the nav bar when the language changes so labels re-translate.
+      bottomNavigationBar: ValueListenableBuilder<String>(
+        valueListenable: SettingsController.instance.language,
+        builder: (_, __, ___) => _BottomNav(
+          index: index,
+          onTap: (i) {
+            HapticFeedback.selectionClick();
+            // Tapping the already-active tab is a no-op rather than a reload.
+            if (i != index) context.go(_tabs[i]);
+          },
+        ),
       ),
     );
   }
@@ -147,11 +152,11 @@ class _BottomNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _NavItem(icon: Icons.home_rounded, label: 'Home', selected: index == 0, onTap: () => onTap(0)),
-              _NavItem(icon: Icons.map_rounded, label: 'Map', selected: index == 1, onTap: () => onTap(1)),
-              _NavItem(icon: Icons.people_rounded, label: 'Community', selected: index == 2, onTap: () => onTap(2)),
-              _NavItem(icon: Icons.bookmark_rounded, label: 'Saved', selected: index == 3, onTap: () => onTap(3)),
-              _NavItem(icon: Icons.person_rounded, label: 'Profile', selected: index == 4, onTap: () => onTap(4)),
+              _NavItem(icon: Icons.home_rounded, label: L10n.t('nav_home'), selected: index == 0, onTap: () => onTap(0)),
+              _NavItem(icon: Icons.map_rounded, label: L10n.t('nav_map'), selected: index == 1, onTap: () => onTap(1)),
+              _NavItem(icon: Icons.people_rounded, label: L10n.t('nav_community'), selected: index == 2, onTap: () => onTap(2)),
+              _NavItem(icon: Icons.bookmark_rounded, label: L10n.t('nav_saved'), selected: index == 3, onTap: () => onTap(3)),
+              _NavItem(icon: Icons.person_rounded, label: L10n.t('nav_profile'), selected: index == 4, onTap: () => onTap(4)),
             ],
           ),
         ),

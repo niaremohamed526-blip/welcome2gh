@@ -37,7 +37,12 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
   static const _accra = LatLng(5.6037, -0.1870);
 
-  final _categories = ['Restaurant', 'Hostel', 'Hotel', 'University', 'Cafe', 'Mall', 'Transport', 'Tourist', 'Hospital', 'Other'];
+  final _categories = [
+    'Restaurant', 'Cafe', 'Bar', 'Hostel', 'Hotel', 'University', 'Library',
+    'Mall', 'Supermarket', 'Market', 'Transport', 'Tourist', 'Beach', 'Museum',
+    'Park', 'Nightlife', 'Pharmacy', 'Hospital', 'Bank', 'Gym', 'Salon',
+    'Gas Station', 'Mosque', 'Church', 'Other',
+  ];
 
   bool get _isEdit => widget.editPlace != null;
 
@@ -54,7 +59,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       _photoUrl = (p.imageUrl.isEmpty) ? null : p.imageUrl;
       _priceLevel = p.priceLevel;
       _category = _categories.firstWhere(
-        (c) => c.toLowerCase() == p.category.toLowerCase(),
+        (c) => c.toLowerCase().replaceAll(' ', '_') == p.category.toLowerCase(),
         orElse: () => 'Other',
       );
     }

@@ -34,15 +34,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = SettingsController.instance.themeMode.value == ThemeMode.dark;
     return Scaffold(
       backgroundColor: AppColors.navy,
-      appBar: AppBar(title: const Text('SETTINGS')),
+      appBar: AppBar(title: Text(L10n.t('settings').toUpperCase())),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('APPEARANCE', style: Theme.of(context).textTheme.labelSmall),
+          Text(L10n.t('appearance').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 12),
           _Group(children: [
             _OptionTile(
-              label: 'Language',
+              label: L10n.t('language'),
               value: _lang == 'fr' ? 'Français' : 'English',
               onTap: _pickLanguage,
               icon: Icons.language_rounded,
@@ -51,8 +51,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Dark / Light mode toggle
             ListTile(
               leading: Icon(isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded, color: AppColors.yellow, size: 20),
-              title: Text(isDark ? 'Dark Mode' : 'Light Mode', style: TextStyle(color: AppColors.white, fontSize: 14)),
-              subtitle: Text(isDark ? 'Switch to light theme' : 'Switch to dark theme', style: TextStyle(color: AppColors.grey, fontSize: 12)),
+              title: Text(isDark ? L10n.t('dark_mode') : L10n.t('light_mode'), style: TextStyle(color: AppColors.white, fontSize: 14)),
+              subtitle: Text(isDark ? L10n.t('dark_mode_sub') : L10n.t('light_mode_sub'), style: TextStyle(color: AppColors.grey, fontSize: 12)),
               trailing: Switch(
                 value: isDark,
                 thumbColor: WidgetStateProperty.resolveWith(
@@ -70,20 +70,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           const SizedBox(height: 24),
 
-          Text('NOTIFICATIONS', style: Theme.of(context).textTheme.labelSmall),
+          Text(L10n.t('notifications').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 12),
           _Group(children: [
-            _SwitchTile(label: 'Safety alerts', value: _notifSafety, onChanged: (v) => setState(() => _notifSafety = v)),
-            _SwitchTile(label: 'Community activity', value: _notifCommunity, onChanged: (v) => setState(() => _notifCommunity = v)),
-            _SwitchTile(label: 'Price updates', value: _notifPrices, onChanged: (v) => setState(() => _notifPrices = v)),
+            _SwitchTile(label: L10n.t('safety_alerts'), value: _notifSafety, onChanged: (v) => setState(() => _notifSafety = v)),
+            _SwitchTile(label: L10n.t('community_activity'), value: _notifCommunity, onChanged: (v) => setState(() => _notifCommunity = v)),
+            _SwitchTile(label: L10n.t('price_updates'), value: _notifPrices, onChanged: (v) => setState(() => _notifPrices = v)),
           ]),
           const SizedBox(height: 24),
 
-          Text('SAFETY', style: Theme.of(context).textTheme.labelSmall),
+          Text(L10n.t('safety').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 12),
           _Group(children: [
-            _SwitchTile(label: 'Share my location with nearby travelers', value: _shareLocation, onChanged: (v) => setState(() => _shareLocation = v)),
-            _SwitchTile(label: 'Emergency broadcast alerts', value: _emergencyAlerts, onChanged: (v) => setState(() => _emergencyAlerts = v)),
+            _SwitchTile(label: L10n.t('share_location'), value: _shareLocation, onChanged: (v) => setState(() => _shareLocation = v)),
+            _SwitchTile(label: L10n.t('emergency_broadcast'), value: _emergencyAlerts, onChanged: (v) => setState(() => _emergencyAlerts = v)),
           ]),
           const SizedBox(height: 30),
 
@@ -98,11 +98,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               await s.saveToggles();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings saved'), backgroundColor: AppColors.green),
+                SnackBar(content: Text(L10n.t('settings_saved')), backgroundColor: AppColors.green),
               );
               Navigator.pop(context);
             },
-            child: const Text('SAVE SETTINGS'),
+            child: Text(L10n.t('save_settings').toUpperCase()),
           ),
         ],
       ),
@@ -112,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _pickLanguage() {
     final options = [
       {'code': 'en', 'label': 'English'},
-      {'code': 'fr', 'label': 'FranÃ§ais'},
+      {'code': 'fr', 'label': 'Français'},
     ];
     showModalBottomSheet(
       context: context,
@@ -121,7 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (_) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 16),
-          Text('CHOOSE LANGUAGE', style: Theme.of(context).textTheme.labelSmall),
+          Text(L10n.t('choose_language').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 8),
           for (final opt in options)
             ListTile(

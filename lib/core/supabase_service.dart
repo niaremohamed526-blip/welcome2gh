@@ -509,7 +509,7 @@ class SupabaseService {
     if (id == null) throw Exception('Sign in to add a place');
     final row = await _client.from('places').insert({
       'name': name,
-      'category': category.toLowerCase(),
+      'category': category.toLowerCase().replaceAll(' ', '_'),
       'description': description,
       'address': address,
       'lat': lat,
@@ -707,7 +707,7 @@ class SupabaseService {
   }) async {
     await _client.from('places').update({
       'name': name,
-      'category': category.toLowerCase(),
+      'category': category.toLowerCase().replaceAll(' ', '_'),
       'description': description,
       'address': address,
       'lat': lat,

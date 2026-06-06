@@ -19,7 +19,9 @@ do $$ begin
   create type place_category as enum (
     'hostel','hotel','restaurant','university','hospital',
     'tourist','mall','mosque','church','cafe','study_spot',
-    'event','nightlife','transport','market','other'
+    'event','nightlife','transport','market','other',
+    'beach','museum','park','bar','pharmacy','bank',
+    'supermarket','gym','salon','gas_station','library'
   );
 exception when duplicate_object then null; end $$;
 

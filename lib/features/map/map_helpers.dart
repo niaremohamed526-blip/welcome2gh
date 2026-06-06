@@ -46,6 +46,18 @@ Color categoryColor(String category) {
     case 'tourist': return const Color(0xFF42A5F5);
     case 'mosque':
     case 'church': return const Color(0xFF5C6BC0);
+    case 'beach': return const Color(0xFF00ACC1);
+    case 'museum': return const Color(0xFF8D6E63);
+    case 'park': return const Color(0xFF7CB342);
+    case 'bar': return const Color(0xFF8E24AA);
+    case 'pharmacy': return const Color(0xFF2E7D32);
+    case 'bank':
+    case 'atm': return const Color(0xFF3949AB);
+    case 'supermarket': return const Color(0xFFFFA726);
+    case 'gym': return const Color(0xFFF4511E);
+    case 'salon': return const Color(0xFFD81B60);
+    case 'gas_station': return const Color(0xFF1E88E5);
+    case 'library': return const Color(0xFF5E35B1);
     default: return AppColors.yellow;
   }
 }
@@ -70,6 +82,18 @@ IconData categoryIcon(String category) {
     case 'tourist': return Icons.photo_camera_rounded;
     case 'mosque': return Icons.mosque_rounded;
     case 'church': return Icons.church_rounded;
+    case 'beach': return Icons.beach_access_rounded;
+    case 'museum': return Icons.museum_rounded;
+    case 'park': return Icons.park_rounded;
+    case 'bar': return Icons.local_bar_rounded;
+    case 'pharmacy': return Icons.local_pharmacy_rounded;
+    case 'bank':
+    case 'atm': return Icons.account_balance_rounded;
+    case 'supermarket': return Icons.local_grocery_store_rounded;
+    case 'gym': return Icons.fitness_center_rounded;
+    case 'salon': return Icons.content_cut_rounded;
+    case 'gas_station': return Icons.local_gas_station_rounded;
+    case 'library': return Icons.local_library_rounded;
     default: return Icons.place_rounded;
   }
 }

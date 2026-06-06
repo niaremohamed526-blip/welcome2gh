@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/supabase_service.dart';
+import '../../core/settings_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -93,14 +94,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.navyCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Sign out?', style: TextStyle(color: AppColors.white)),
-        content: Text('You will need to sign in again to access your account.', style: TextStyle(color: AppColors.greyLight)),
+        title: Text(L10n.t('sign_out_q'), style: TextStyle(color: AppColors.white)),
+        content: Text(L10n.t('sign_out_body'), style: TextStyle(color: AppColors.greyLight)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: TextStyle(color: AppColors.grey))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(L10n.t('cancel').toUpperCase(), style: TextStyle(color: AppColors.grey))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.red, foregroundColor: AppColors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('SIGN OUT'),
+            child: Text(L10n.t('sign_out').toUpperCase()),
           ),
         ],
       ),
@@ -121,7 +122,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // Rebuild when the language changes so labels re-translate live.
+    return ValueListenableBuilder<String>(
+      valueListenable: SettingsController.instance.language,
+      builder: (context, _, __) => Scaffold(
       backgroundColor: AppColors.navy,
       body: SafeArea(
         child: _loading
@@ -177,11 +181,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              _StatItem(value: _favoritesCount.toString(), label: 'Saved'),
+                              _StatItem(value: _favoritesCount.toString(), label: L10n.t('saved')),
                               Container(width: 1, height: 32, color: AppColors.cardBorder),
-                              _StatItem(value: _postsCount.toString(), label: 'Posts'),
+                              _StatItem(value: _postsCount.toString(), label: L10n.t('posts')),
                               Container(width: 1, height: 32, color: AppColors.cardBorder),
-                              _StatItem(value: _reviewsCount.toString(), label: 'Reviews'),
+                              _StatItem(value: _reviewsCount.toString(), label: L10n.t('reviews')),
                             ],
                           ),
                         ],
@@ -192,37 +196,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       padding: const EdgeInsets.all(20),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         if (_profile?.role == 'admin') ...[
-                          Text('ADMIN', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.red)),
+                          Text(L10n.t('admin').toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.red)),
                           const SizedBox(height: 16),
                           _SettingItem(
                             icon: Icons.shield_rounded,
-                            label: 'Admin Dashboard',
+                            label: L10n.t('admin_dashboard'),
                             accent: AppColors.red,
                             onTap: () => context.push('/admin'),
                           ),
                           const SizedBox(height: 24),
                         ],
-                        Text('SETTINGS', style: Theme.of(context).textTheme.labelSmall),
+                        Text(L10n.t('settings').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
                         const SizedBox(height: 16),
-                        _SettingItem(icon: Icons.person_outline_rounded, label: 'Edit Profile', onTap: () async {
+                        _SettingItem(icon: Icons.person_outline_rounded, label: L10n.t('edit_profile'), onTap: () async {
                           await context.push('/edit-profile');
                           _load();
                         }),
-                        _SettingItem(icon: Icons.add_location_alt_outlined, label: 'Add a Place', onTap: () => context.push('/add-place')),
-                        _SettingItem(icon: Icons.attach_money_rounded, label: 'Fair Prices', onTap: () => context.push('/fair-price')),
-                        _SettingItem(icon: Icons.settings_outlined, label: 'Settings', onTap: () => context.push('/settings')),
-                        _SettingItem(icon: Icons.auto_awesome_rounded, label: 'Ask the AI Guide', onTap: () => context.push('/ai')),
+                        _SettingItem(icon: Icons.add_location_alt_outlined, label: L10n.t('add_place'), onTap: () => context.push('/add-place')),
+                        _SettingItem(icon: Icons.attach_money_rounded, label: L10n.t('fair_prices'), onTap: () => context.push('/fair-price')),
+                        _SettingItem(icon: Icons.settings_outlined, label: L10n.t('settings'), onTap: () => context.push('/settings')),
+                        _SettingItem(icon: Icons.auto_awesome_rounded, label: L10n.t('ask_ai'), onTap: () => context.push('/ai')),
                         const SizedBox(height: 24),
-                        Text('SAFETY', style: Theme.of(context).textTheme.labelSmall),
+                        Text(L10n.t('safety').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
                         const SizedBox(height: 16),
-                        _SettingItem(icon: Icons.emergency_rounded, label: 'Emergency Contacts', accent: AppColors.red, onTap: () => _showEmergency(context)),
-                        _SettingItem(icon: Icons.shield_outlined, label: 'Safety Settings', onTap: () {}),
+                        _SettingItem(icon: Icons.emergency_rounded, label: L10n.t('emergency_contacts'), accent: AppColors.red, onTap: () => _showEmergency(context)),
+                        _SettingItem(icon: Icons.shield_outlined, label: L10n.t('safety_settings'), onTap: () {}),
                         const SizedBox(height: 24),
-                        Text('ACCOUNT', style: Theme.of(context).textTheme.labelSmall),
+                        Text(L10n.t('account').toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
                         const SizedBox(height: 16),
-                        _SettingItem(icon: Icons.help_outline_rounded, label: 'Help & Support', onTap: () => context.push('/help')),
-                        _SettingItem(icon: Icons.info_outline_rounded, label: 'About Welcome2GH', onTap: () => context.push('/about')),
-                        _SettingItem(icon: Icons.logout_rounded, label: 'Sign Out', accent: AppColors.red, onTap: _signOut),
+                        _SettingItem(icon: Icons.help_outline_rounded, label: L10n.t('help'), onTap: () => context.push('/help')),
+                        _SettingItem(icon: Icons.info_outline_rounded, label: L10n.t('about'), onTap: () => context.push('/about')),
+                        _SettingItem(icon: Icons.logout_rounded, label: L10n.t('sign_out'), accent: AppColors.red, onTap: _signOut),
                         const SizedBox(height: 40),
                         Center(
                           child: Text(
@@ -238,7 +242,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
       ),
-    );
+    ));
   }
 
   Widget _avatarPlaceholder() => Container(
