@@ -9,6 +9,7 @@ import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/map/map_screen.dart';
 import '../features/map/map3d_screen.dart';
+import '../features/directions/directions_screen.dart';
 import '../features/place_details/place_details_screen.dart';
 import '../features/community/community_screen.dart';
 import '../features/favorites/favorites_screen.dart';
@@ -65,6 +66,17 @@ final router = GoRouter(
         // Dev/preview route for the MapLibre 3D engine migration. The live
         // /map stays on flutter_map until the new engine is verified.
         GoRoute(path: '/map3d', builder: (_, __) => const Map3DScreen()),
+        // TEMP (maplibre-migration): preview the MapLibre Directions/navigation
+        // screen with a fixed destination. Remove during the final swap.
+        GoRoute(
+          path: '/nav-demo',
+          builder: (_, __) => const DirectionsScreen(
+            destLat: 5.6510,
+            destLng: -0.1870,
+            destName: 'University of Ghana, Legon',
+            autoStart: true,
+          ),
+        ),
         GoRoute(path: '/community', builder: (_, __) => const CommunityScreen()),
         GoRoute(path: '/favorites', builder: (_, __) => const FavoritesScreen()),
         GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
