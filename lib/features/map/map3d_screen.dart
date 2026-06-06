@@ -14,6 +14,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/supabase_service.dart';
 import '../../core/routing_service.dart';
+import '../../core/eta_model.dart';
 import '../../core/geo/geo_math.dart';
 import '../../shared/widgets/app_image.dart';
 import '../directions/directions_screen.dart';
@@ -590,8 +591,20 @@ class _Map3DScreenState extends State<Map3DScreen> {
     final drive = results[1];
     setState(() {
       _etaLoading = false;
+      // Calibrated, consistent ETA (same hybrid model as the directions screen).
       _eta = (walk != null && drive != null)
-          ? (walkMin: walk.minutes, driveMin: drive.minutes)
+          ? (
+              walkMin: EtaModel.minutes(
+                profile: 'foot',
+                distanceMeters: walk.distanceMeters,
+                apiDurationSec: walk.durationSeconds,
+              ),
+              driveMin: EtaModel.minutes(
+                profile: 'driving',
+                distanceMeters: drive.distanceMeters,
+                apiDurationSec: drive.durationSeconds,
+              ),
+            )
           : null;
     });
   }

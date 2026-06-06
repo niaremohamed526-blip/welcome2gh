@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre/maplibre.dart' hide Position;
 import '../../shared/theme/app_theme.dart';
 import '../../core/geo/geo_math.dart';
+import '../../core/eta_model.dart';
 import '../map/map_helpers.dart' show glass;
 
 // ── Data model ──────────────────────────────────────────────────────────────
@@ -426,13 +427,25 @@ class _DirectionsScreenState extends State<DirectionsScreen>
       });
 
       final straightKm = haversineMeters(_userLoc!, _dest) / 1000;
-      debugPrint('[NAV] straight-line=${straightKm.toStringAsFixed(2)}km  '
-          'ROUTE=${_distanceKm!.toStringAsFixed(2)}km  ETA(raw)=${_durationMin}min'
-          '  profile=$_profile');
+      final detour = EtaModel.detourRatio(
+          routeMeters: _distanceKm! * 1000, straightMeters: straightKm * 1000);
+      final calMin = EtaModel.minutes(
+        profile: _profile,
+        distanceMeters: _distanceKm! * 1000,
+        apiDurationSec: _durationMin! * 60,
+        turns: _steps.length,
+      );
+      debugPrint('[NAV] straight=${straightKm.toStringAsFixed(2)}km  '
+          'route=${_distanceKm!.toStringAsFixed(2)}km  detour=${detour.toStringAsFixed(2)}x  '
+          'engineETA=${_durationMin}min  calibratedETA=${calMin}min  profile=$_profile');
       if (straightKm > 3) {
         debugPrint('[NAV] WARNING: origin and destination are '
             '${straightKm.toStringAsFixed(1)}km apart as the crow flies — if that '
             'seems wrong, the destination coordinates are likely off.');
+      }
+      if (detour > 2.5) {
+        debugPrint('[NAV] WARNING: detour ratio ${detour.toStringAsFixed(1)}x — '
+            'possible bad route/data for profile=$_profile.');
       }
 
       _onRouteReady(reframe: !reroute && !_navigating);
@@ -854,15 +867,17 @@ class _DirectionsScreenState extends State<DirectionsScreen>
   /// driving is padded most). Recomputed every GPS fix from progress along the
   /// route — not a static distance/speed number.
   double get _remainingSec {
-    if (_durationMin == null || _total <= 0) return 0;
-    final avgMps = _total / (_durationMin! * 60); // route average speed (m/s)
-    final factor = _profile == 'driving'
-        ? 1.25
-        : _profile == 'cycling'
-            ? 1.1
-            : 1.05;
-    final dist = _navigating ? _remainingM : _total;
-    return dist / (avgMps > 0 ? avgMps : 5) * factor;
+    if (_durationMin == null) return 0;
+    // Calibrated whole-trip time (hybrid model), then scaled to the portion of
+    // the route still ahead so the live ETA stays consistent with planning.
+    final totalSec = EtaModel.seconds(
+      profile: _profile,
+      distanceMeters: (_distanceKm ?? 0) * 1000,
+      apiDurationSec: (_durationMin ?? 0) * 60,
+      turns: _steps.length,
+    );
+    if (_total <= 0) return totalSec;
+    return _navigating ? totalSec * (_remainingM / _total) : totalSec;
   }
 
   String get _eta {
